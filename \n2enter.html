@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>\nを改行に変換するツール</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2rem;
+    }
+    textarea {
+      width: 100%;
+      height: 150px;
+      font-size: 1rem;
+      padding: 0.5rem;
+      box-sizing: border-box;
+    }
+    button {
+      margin-top: 1rem;
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+    }
+    pre {
+      background: #f0f0f0;
+      padding: 1rem;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>\nを改行に変換するツール</h1>
+  <textarea id="inputText" placeholder="ここに\\nを含むテキストを入力してください"></textarea>
+  <br />
+  <button onclick="convertToNewline()">変換する</button>
+  <pre id="outputText"></pre>
+
+  <script>
+    function convertToNewline() {
+      const input = document.getElementById('inputText').value;
+      // \n を実際の改行に置換
+      const output = input.replace(/\\n/g, '\n');
+      document.getElementById('outputText').textContent = output;
+    }
+  </script>
+</body>
+</html>
