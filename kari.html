@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>カスタムフォントビューア</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    #preview {
+      border: 1px solid #ccc;
+      padding: 20px;
+      margin-top: 10px;
+      font-size: 24px;
+      min-height: 100px;
+    }
+  </style>
+</head>
+<body>
+  <h1>カスタムフォントビューア</h1>
+
+  <!-- フォントファイル入力 -->
+  <label for="fontFile">フォントファイル（.ttf/.otf）:</label>
+  <input id="fontFile" type="file" accept=".ttf,.otf"><br><br>
+
+  <!-- テキスト入力 -->
+  <label for="textInput">プレビュー文字列:</label>
+  <input id="textInput" type="text" value="こんにちは、世界！" style="width: 100%;"><br>
+
+  <!-- プレビュー領域 -->
+  <div id="preview">こんにちは、世界！</div>
+
+  <script>
+    const fontFileInput = document.getElementById('fontFile');
+    const textInput     = document.getElementById('textInput');
+    const preview       = document.getElementById('preview');
+    let customFontName  = 'customFont';
+
+    // プレビュー文字列更新
+    textInput.addEventListener('input', () => {
+      preview.textContent = textInput.value;
+    });
+
+    // フォントファイルが選択されたら
+    fontFileInput.addEventListener('change', () => {
+      const file = fontFileInput.files[0];
+      if (!file) return;
+
+      // ブラウザにファイルの blob URL を作成
+      const fontUrl = URL.createObjectURL(file);
+
+      // 既存の @font-face があれば削除（必要なら）
+      const oldStyle = document.getElementById('dynamicFont');
+      if (oldStyle) oldStyle.remove();
+
+      // 新しい @font-face ルールを作る
+      const style = document.createElement('style');
+      style.id = 'dynamicFont';
+      style.textContent = `
+        @font-face {
+          font-family: '${customFontName}';
+          src: url('${fontUrl}') format('${file.name.endsWith('.otf') ? 'opentype' : 'truetype'}');
+          font-weight: normal;
+          font-style: normal;
+        }
+      `;
+      document.head.appendChild(style);
+
+      // プレビューに適用
+      preview.style.fontFamily = `'${customFontName}', sans-serif`;
+    });
+  </script>
+</body>
+</html>
