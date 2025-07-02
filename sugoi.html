@@ -3,658 +3,752 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>カスタムフォントビューア | Custom Font Viewer</title>
+    <title>120点を目指すカスタムフォントビューア</title>
+    
+    <!-- opentype.jsをCDNから読み込み -->
+    <script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
+
     <style>
+        /* --- Global Styles & Design System --- */
         :root {
-            --bg-color: #1a1a1d;
-            --primary-color: #25282e;
-            --secondary-color: #363940;
-            --text-color: #e0e0e0;
-            --accent-color: #4a90e2;
-            --accent-hover-color: #63a4ff;
-            --border-color: #4a4a4a;
-            --font-family-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            --shadow-sm: 0 2px 4px rgba(0,0,0,0.2);
-            --shadow-md: 0 4px 10px rgba(0,0,0,0.3);
+            --color-bg: #1a1a1d;
+            --color-bg-light: #2c2c31;
+            --color-bg-lighter: #45454b;
+            --color-primary: #4a90e2;
+            --color-text: #f0f0f0;
+            --color-text-muted: #888;
+            --color-border: #3a3a40;
+            --color-error: #e24a4a;
+            --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             --border-radius: 8px;
+            --shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
 
-        body.light-mode {
-            --bg-color: #f4f5f7;
-            --primary-color: #ffffff;
-            --secondary-color: #e9eaec;
-            --text-color: #2c3e50;
-            --accent-color: #3498db;
-            --accent-hover-color: #5dade2;
-            --border-color: #dcdfe6;
+        /* --- Base Setup --- */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { height: 100%; }
+        html, body {
+            height: 100%;
+        }
 
         body {
-            font-family: var(--font-family-ui);
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            transition: background-color 0.3s ease, color 0.3s ease;
-            font-size: 16px;
-            overflow: hidden;
-        }
-
-        #app { display: flex; flex-direction: column; height: 100vh; }
-
-        .app-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 24px;
-            background-color: var(--primary-color);
-            border-bottom: 1px solid var(--border-color);
-            box-shadow: var(--shadow-sm);
-            flex-shrink: 0;
-            z-index: 10;
-        }
-        
-        .app-header h1 { font-size: 1.25rem; font-weight: 600; }
-        .header-controls { display: flex; align-items: center; gap: 16px; }
-
-        #drop-zone {
+            font-family: var(--font-ui);
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            font-size: 14px;
+            line-height: 1.6;
             display: flex;
             flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            flex-grow: 1;
-            padding: 40px;
-            text-align: center;
-            transition: background-color 0.3s ease, border-color 0.3s ease;
+            overflow: hidden; /* Prevent body scroll */
         }
-        #drop-zone.dragover { background-color: var(--secondary-color); }
-        #drop-zone .drop-content {
-            border: 3px dashed var(--border-color);
-            border-radius: var(--border-radius);
-            padding: 60px 80px;
-            transition: all 0.3s ease;
-            max-width: 600px;
+
+        /* --- Layout --- */
+        .container {
+            display: flex;
+            height: 100vh;
         }
-        #drop-zone.dragover .drop-content { border-color: var(--accent-color); transform: scale(1.02); }
-        #drop-zone h2 { font-size: 1.8rem; margin-bottom: 16px; color: var(--accent-color); }
-        #drop-zone p { margin-bottom: 24px; opacity: 0.8; }
-        
-        #viewer {
-            display: grid;
-            grid-template-columns: 300px 1fr;
-            height: calc(100vh - 61px);
-            overflow: hidden;
-        }
-        #viewer.hidden, #drop-zone.hidden { display: none; }
 
         .sidebar {
-            background-color: var(--primary-color);
-            padding: 24px;
-            border-right: 1px solid var(--border-color);
+            width: 350px;
+            background-color: var(--color-bg-light);
+            padding: 20px;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 24px;
+            gap: 25px;
+            box-shadow: var(--shadow);
+            z-index: 10;
         }
 
+        .main-content {
+            flex-grow: 1;
+            padding: 30px;
+            overflow-y: auto;
+        }
+        
+        /* --- UI Components --- */
         .control-group {
-            background: var(--secondary-color);
+            background-color: var(--color-bg);
             border-radius: var(--border-radius);
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
+            padding: 15px;
+            border: 1px solid var(--color-border);
         }
+
         .control-group h3 {
-            font-size: 1rem;
-            font-weight: 600;
-            border-bottom: 1px solid var(--border-color);
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: var(--color-primary);
+            font-size: 16px;
+            border-bottom: 1px solid var(--color-border);
             padding-bottom: 8px;
-            margin-bottom: 8px;
         }
-        .control-group label { font-size: 0.875rem; opacity: 0.8; }
 
-        .info-table { width: 100%; font-size: 0.8rem; border-collapse: collapse; }
-        .info-table td { padding: 6px 0; vertical-align: top; }
-        .info-table td:first-child { font-weight: 600; width: 80px; opacity: 0.7; }
-        .info-table td:last-child { word-break: break-all; }
+        label, .label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: var(--color-text-muted);
+            font-size: 12px;
+            text-transform: uppercase;
+        }
 
-        .preview-area { display: flex; flex-direction: column; overflow: hidden; }
-        .preview-controls {
+        input[type="range"], textarea, select {
+            width: 100%;
+            background-color: var(--color-bg-lighter);
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            color: var(--color-text);
+            padding: 8px;
+            font-family: var(--font-ui);
+        }
+        
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .slider-container {
             display: flex;
             align-items: center;
-            gap: 16px;
-            padding: 16px 24px;
-            border-bottom: 1px solid var(--border-color);
-            background: var(--primary-color);
-            flex-shrink: 0;
+            gap: 10px;
+        }
+        .slider-container output {
+            font-variant-numeric: tabular-nums;
+            min-width: 30px;
+            text-align: right;
         }
 
-        .preview-content { flex-grow: 1; padding: 32px; overflow-y: auto; background: var(--bg-color); }
-        
-        #preview-text-input {
-            width: 100%;
-            height: 100%;
-            font-size: 48px;
-            line-height: 1.5;
-            color: var(--text-color);
-            background: transparent;
-            border: none;
-            outline: none;
-            resize: none;
-            padding: 0;
-            transition: font-size 0.2s ease;
+        /* --- Drag & Drop Area --- */
+        #drop-zone {
+            border: 2px dashed var(--color-border);
+            border-radius: var(--border-radius);
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s;
         }
+        #drop-zone.dragover {
+            background-color: var(--color-bg-lighter);
+            border-color: var(--color-primary);
+        }
+        #drop-zone p {
+            color: var(--color-text-muted);
+            pointer-events: none;
+        }
+        #file-input { display: none; }
         
-        #glyph-map-container { display: none; }
-        #glyph-map-container h3 { margin-bottom: 16px; }
-        #glyph-map {
+        /* --- Font Info --- */
+        #font-info ul {
+            list-style: none;
+        }
+        #font-info li {
             display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid var(--color-border);
         }
-        #glyph-map span {
-            display: inline-flex;
+        #font-info li:last-child { border-bottom: none; }
+        #font-info .key { color: var(--color-text-muted); }
+        #font-info .value { color: var(--color-text); text-align: right; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* --- TTC Selector --- */
+        #ttc-selector { display: none; }
+        
+        /* --- Feature Toggles --- */
+        #feature-controls .feature-toggle {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 0;
+        }
+        .feature-toggle label {
+            margin: 0;
+            font-weight: normal;
+            font-family: "Courier New", monospace;
+            text-transform: none;
+        }
+        /* Basic switch toggle style */
+        .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--color-bg-lighter); transition: .4s; border-radius: 20px; }
+        .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--color-primary); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        /* --- Preview Area --- */
+        .preview-wrapper {
+            background-color: var(--color-bg);
+            padding: 20px;
+            border-radius: var(--border-radius);
+            margin-bottom: 30px;
+            border: 1px solid var(--color-border);
+        }
+        #preview-text {
+            /* This will be controlled by JS */
+            font-family: 'CustomFontPreview', sans-serif;
+            font-size: 48px;
+            line-height: 1.4;
+            color: var(--color-text);
+            word-wrap: break-word;
+            transition: all 0.1s linear; /* For smooth variable font transitions */
+        }
+        .placeholder-text {
+            font-size: 24px;
+            color: var(--color-text-muted);
+            display: flex;
             justify-content: center;
             align-items: center;
-            width: 50px;
-            height: 50px;
-            font-size: 24px;
-            background: var(--secondary-color);
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background-color .2s;
-        }
-        #glyph-map span:hover { background: var(--border-color); }
-        
-        .btn {
-            background-color: var(--accent-color);
-            color: white;
-            border: none;
-            padding: 10px 16px;
-            border-radius: var(--border-radius);
-            font-weight: 500;
-            cursor: pointer;
-            transition: background-color 0.2s ease, transform 0.1s ease;
+            min-height: 200px;
             text-align: center;
         }
-        .btn:hover { background-color: var(--accent-hover-color); }
-        .btn:active { transform: scale(0.98); }
-        .btn-secondary { background-color: var(--secondary-color); color: var(--text-color); }
-        .btn-secondary:hover { background-color: #555962; }
-        body.light-mode .btn-secondary:hover { background-color: #d8d9db; }
 
-        input[type="file"] { display: none; }
-        
-        input[type="range"] {
-            -webkit-appearance: none; appearance: none;
-            width: 100%; height: 8px;
-            background: var(--primary-color);
-            border-radius: 4px; outline: none; cursor: pointer;
+        /* --- Waterfall Display --- */
+        #waterfall-display .waterfall-item {
+            display: flex;
+            align-items: baseline;
+            gap: 15px;
+            border-bottom: 1px solid var(--color-border);
+            padding: 8px 0;
         }
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none; appearance: none;
-            width: 18px; height: 18px;
-            background: var(--accent-color); border-radius: 50%;
+        #waterfall-display .size-label {
+            font-family: var(--font-ui);
+            color: var(--color-text-muted);
+            font-size: 12px;
+            width: 40px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        #waterfall-display .text-preview {
+            font-family: 'CustomFontPreview', sans-serif;
+            flex-grow: 1;
+        }
+
+        /* --- Glyph Map --- */
+        #glyph-map {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+            gap: 10px;
+        }
+        .glyph-item {
+            background-color: var(--color-bg-light);
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'CustomFontPreview', sans-serif;
+            font-size: 28px;
             cursor: pointer;
+            transition: background-color 0.2s, transform 0.2s;
+            position: relative;
         }
-        input[type="range"]::-moz-range-thumb {
-            width: 18px; height: 18px;
-            background: var(--accent-color); border-radius: 50%;
-            cursor: pointer; border: none;
+        .glyph-item:hover {
+            background-color: var(--color-primary);
+            color: white;
+            transform: scale(1.1);
         }
-        
-        select, .styled-select {
-            width: 100%; padding: 8px 12px;
-            background: var(--primary-color); color: var(--text-color);
-            border: 1px solid var(--border-color); border-radius: 4px;
-            font-size: 0.9rem; cursor: pointer;
+        .glyph-item .tooltip {
+            visibility: hidden;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 4px;
+            padding: 5px 8px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.2s;
+            font-size: 12px;
+            font-family: var(--font-ui);
+            white-space: nowrap;
         }
-        
-        .theme-switch {
-            display: flex; align-items: center; justify-content: center;
-            width: 44px; height: 44px;
-            background: var(--secondary-color); border: none;
-            border-radius: 50%; cursor: pointer;
-            color: var(--text-color); font-size: 20px;
-            transition: all 0.2s ease;
+        .glyph-item:hover .tooltip {
+            visibility: visible;
+            opacity: 1;
         }
-        .theme-switch:hover { background: #555962; }
-        body.light-mode .theme-switch:hover { background-color: #d8d9db; }
-        
-        .loader {
-            border: 4px solid var(--secondary-color);
-            border-top: 4px solid var(--accent-color);
-            border-radius: 50%; width: 40px; height: 40px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        @media (max-width: 900px) {
-            #viewer { grid-template-columns: 1fr; height: auto; }
-            .sidebar { border-right: none; border-bottom: 1px solid var(--border-color); max-height: 50vh; overflow-y: auto; }
-            .preview-area { height: calc(100vh - 61px - 50vh); }
+        /* --- Status & Messages --- */
+        .status-message {
+            text-align: center;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
         }
-        @media (max-width: 600px) {
-            .app-header h1 { font-size: 1rem; }
-            #drop-zone .drop-content { padding: 40px; }
-            .preview-controls { flex-direction: column; gap: 12px; align-items: stretch; }
+        .status-message.error { background-color: var(--color-error); color: white; }
+        .status-message.info { background-color: var(--color-primary); color: white; }
+
+        /* --- Responsive Design --- */
+        @media (max-width: 900px) {
+            .container { flex-direction: column; height: auto; }
+            .sidebar { width: 100%; height: auto; max-height: 50vh; }
+            .main-content { max-height: none; }
         }
     </style>
 </head>
-<body class="dark-mode">
+<body>
 
-    <!-- opentype.js v1.3.4 (Full, Minified) -->
-    <script>!function(t,e){"object"==typeof exports&&"undefined"!=typeof module?e(exports):"function"==typeof define&&define.amd?define(["exports"],e):e((t="undefined"!=typeof globalThis?globalThis:t||self).opentype={})}(this,(function(t){"use strict";var e,r,i,s,n,o,a,h,u,c,l,f,p,d,g,y,m,v,_,w,b,x,P,T,k,S,C,A,B,F,R,D,G,M,O,L,z,N,I,U,W,j,E,V,q,H,K,Z,Y,$,J,X,Q,tt,et,rt,it,st,nt,ot,at,ht,ut,ct,lt,ft,pt,dt,gt,yt,mt,vt,_t,wt,bt,xt,Pt,Tt,kt,St,Ct,At,Bt,Ft,Rt,Dt,Gt,Mt,Ot,Lt,zt,Nt,It,Ut,Wt,jt,Et,Vt,qt,Ht,Kt,Zt,Yt,$t,Jt,Xt,Qt,te,ee,re,ie,se,ne,oe,ae,he,ue,ce,le,fe,pe,de,ge,ye,me,ve,_e,we,be,xe,Pe,Te,ke,Se,Ce,Ae,Be,Fe,Re,De,Ge,Me,Oe,Le,ze,Ne,Ie,Ue,We,je,Ee,Ve,qe,He,Ke,Ze,Ye,$e,Je,Xe,Qe,tr,er,rr,ir,sr,nr,or,ar,hr,ur,cr,lr,fr,pr,dr,gr,yr,mr,vr,_r,wr,br,xr,Pr,Tr,kr,Sr,Cr,Ar,Br,Fr,Rr,Dr,Gr,Mr,Or,Lr,zr,Nr,Ir,Ur,Wr,jr,Er,Vr,qr,Hr,Kr,Zr,Yr,$r,Jr,Xr,Qr,ti,ei,ri,ii,si,ni,oi,ai,hi,ui,ci,li,fi,pi,di,gi,yi,mi,vi,_i,wi,bi,xi,Pi,Ti,ki,Si,Ci,Ai,Bi,Fi,Ri,Di,Gi,Mi,Oi,Li,zi,Ni,Ii,Ui,Wi,ji,Ei,Vi,qi,Hi,Ki,Zi,Yi,$i,Ji,Xi,Qi,ts,es,rs,is,ss,ns,os,as,hs,us,cs,ls,fs,ps,ds,gs,ys,ms,vs,_s,ws,bs,xs,Ps,Ts,ks,Ss,Cs,As,Bs,Fs,Rs,Ds,Gs,Ms,Os,Ls,zs,Ns,Is,Us,Ws,js,Es,Vs,qs,Hs,Ks,Zs,Ys,$s,Js,Xs,Qs,to,eo,ro,io,so,no,oo,ao,ho,uo,co,lo,fo,po,do,go,yo,mo,vo,_o,wo,bo,xo,Po,To,ko,So,Co,Ao,Bo,Fo,Ro,Do,Go,Mo,Oo,Lo,zo,No,Io,Uo,Wo,jo,Eo,Vo,qo,Ho,Ko,Zo,Yo,$o,Jo,Xo,Qo,ta,ea,ra,ia,sa,na,oa,aa,ha,ua,ca,la,fa,pa,da,ga,ya,ma,va,_a,wa,ba,xa,Pa,Ta,ka,Sa,Ca,Aa,Ba,Fa,Ra,Da,Ga,Ma,Oa,La,za,Na,Ia,Ua,Wa,ja,Ea,Va,qa,Ha,Ka,Za,Ya,$a,Ja,Xa,Qa,th,eh,rh,ih,sh,nh,oh,ah,hh,uh,ch,lh,fh,ph,dh,gh,yh,mh,vh,_h,wh,bh,xh,Ph,Th,kh,Sh,Ch,Ah,Bh,Fh,Rh,Dh,Gh,Mh,Oh,Lh,zh,Nh,Ih,Uh,Wh,jh,Eh,Vh,qh,Hh,Kh,Zh,Yh,$h,Jh,Xh,Qh,tu,eu,ru,iu,su,nu,ou,au,hu,uu,cu,lu,fu,pu,du,gu,yu,mu,vu,_u,wu,bu,xu,Pu,Tu,ku,Su,Cu,Au,Bu,Fu,Ru,Du,Gu,Mu,Ou,Lu,zu,Nu,Iu,Uu,Wu,ju,Eu,Vu,qu,Hu,Ku,Zu,Yu,$u,Ju,Xu,Qu,tc,ec,rc,ic,sc,nc,oc,ac,hc,uc,cc,lc,fc,pc,dc,gc,yc,mc,vc,_c,wc,bc,xc,Pc,Tc,kc,Sc,Cc,Ac,Bc,Fc,Rc,Dc,Gc,Mc,Oc,Lc,zc,Nc,Ic,Uc,Wc,jc,Ec,Vc,qc,Hc,Kc,Zc,Yc,$c,Jc,Xc,Qc,tl,el,rl,il,sl,nl,ol,al,hl,ul,cl,ll,fl,pl,dl,gl,yl,ml,vl,_l,wl,bl,xl,Pl,Tl,kl,Sl,Cl,Al,Bl,Fl,Rl,Dl,Gl,Ml,Ol,Ll,zl,Nl,Il,Ul,Wl,jl,El,Vl,ql,Hl,Kl,Zl,Yl,$l,Jl,Xl,Ql,tf,ef,rf,if,sf,nf,of,af,hf,uf,cf,lf,ff,pf,df,gf,yf,mf,vf,_f,wf,bf,xf,Pf,Tf,kf,Sf,Cf,Af,Bf,Ff,Rf,Df,Gf,Mf,Of,Lf,zf,Nf,If,Uf,Wf,jf,Ef,Vf,qf,Hf,Kf,Zf,Yf,$f,Jf,Xf,Qf,tp,ep,rp,ip,sp,np,op,ap,hp,up,cp,lp,fp,pp,dp,gp,yp,mp,vp,_p,wp,bp,xp,Pp,Tp,kp,Sp,Cp,Ap,Bp,Fp,Rp,Dp,Gp,Mp,Op,Lp,zp,Np,Ip,Up,Wp,jp,Ep,Vp,qp,Hp,Kp,Zp,Yp,$p,Jp,Xp,Qp,td,ed,rd,id,sd,nd,od,ad,hd,ud,cd,ld,fd,pd,dd,gd,yd,md,vd,_d,wd,bd,xd,Pd,Td,kd,Sd,Cd,Ad,Bd,Fd,Rd,Dd,Gd,Md,Od,Ld,zd,Nd,Id,Ud,Wd,jd,Ed,Vd,qd,Hd,Kd,Zd,Yd,$d,Jd,Xd,Qd,tg,eg,rg,ig,sg,ng,og,ag,hg,ug,cg,lg,fg,pg,dg,gg,yg,mg,vg,_g,wg,bg,xg,Pg,Tg,kg,Sg,Cg,Ag,Bg,Fg,Rg,Dg,Gg,Mg,Og,Lg,zg,Ng,Ig,Ug,Wg,jg,Eg,Vg,qg,Hg,Kg,Zg,Yg,$g,Jg,Xg,Qg,ty,ey,ry,iy,sy,ny,oy,ay,hy,uy,cy,ly,fy,py,dy,gy,yy,my,vy,_y,wy,by,xy,Py,Ty,ky,Sy,Cy,Ay,By,Fy,Ry,Dy,Gy,My,Oy,Ly,zy,Ny,Iy,Uy,Wy,jy,Ey,Vy,qy,Hy,Ky,Zy,Yy,$y,Jy,Xy,Qy,tm,em,rm,im,sm,nm,om,am,hm,um,cm,lm,fm,pm,dm,gm,ym,mm,vm,_m,wm,bm,xm,Pm,Tm,km,Sm,Cm,Am,Bm,Fm,Rm,Dm,Gm,Mm,Om,Lm,zm,Nm,Im,Um,Wm,jm,Em,Vm,qm,Hm,Km,Zm,Ym,$m,Jm,Xm,Qm,tv,ev,rv,iv,sv,nv,ov,av,hv,uv,cv,lv,fv,pv,dv,gv,yv,mv,vv,_v,wv,bv,xv,Pv,Tv,kv,Sv,Cv,Av,Bv,Fv,Rv,Dv,Gv,Mv,Ov,Lv,zv,Nv,Iv,Uv,Wv,jv,Ev,Vv,qv,Hv,Kv,Zv,Yv,$v,Jv,Xv,Qv,t_,e_,r_,i_,s_,n_,o_,a_,h_,u_,c_,l_,f_,p_,d_,g_,y_,m_,v__,w_,b_,x_,P_,T_,k_,S_,C_,A_,B_,F_,R_,D_,G_,M_,O_,L_,z_,N_,I_,U_,W_,j_,E_,V_,q_,H_,K_,Z_,Y_,$_,J_,X_,Q_,tx,ex,rx,ix,sx,nx,ox,ax,hx,ux,cx,lx,fx,px,dx,gx,yx,mx,vx,_x,wx,bx,xx,Px,Tx,kx,Sx,Cx,Ax,Bx,Fx,Rx,Dx,Gx,Mx,Ox,Lx,zx,Nx,Ix,Ux,Wx,jx,Ex,Vx,qx,Hx,Kx,Zx,Yx,$x,Jx,Xx,Qx,tb,eb,rb,ib,sb,nb,ob,ab,hb,ub,cb,lb,fb,pb,db,gb,yb,mb,vb,_b,wb,bb,xb,Pb,Tb,kb,Sb,Cb,Ab,Bb,Fb,Rb,Db,Gb,Mb,Ob,Lb,zb,Nb,Ib,Ub,Wb,jb,Eb,Vb,qb,Hb,Kb,Zb,Yb,$b,Jb,Xb,Qb,tw,ew,rw,iw,sw,nw,ow,aw,hw,uw,cw,lw,fw,pw,dw,gw,yw,mw,vw,_w,ww,bw,xw,Pw,Tw,kw,Sw,Cw,Aw,Bw,Fw,Rw,Dw,Gw,Mw,Ow,Lw,zw,Nw,Iw,Uw,Ww,jw,Ew,Vw,qw,Hw,Kw,Zw,Yw,$w,Jw,Xw,Qw,tS,eS,rS,iS,sS,nS,oS,aS,hS,uS,cS,lS,fS,pS,dS,gS,yS,mS,vS,_S,wS,bS,xS,PS,TS,kS,SS,CS,AS,BS,FS,RS,DS,GS,MS,OS,LS,zS,NS,IS,US,WS,jS,ES,VS,qS,HS,KS,ZS,YS,$S,JS,XS,QS,tk,ek,rk,ik,sk,nk,ok,ak,hk,uk,ck,lk,fk,pk,dk,gk,yk,mk,vk,_k,wk,bk,xk,Pk,Tk,kk,Sk,Ck,Ak,Bk,Fk,Rk,Dk,Gk,Mk,Ok,Lk,zk,Nk,Ik,Uk,Wk,jk,Ek,Vk,qk,Hk,Kk,Zk,Yk,$k,Jk,Xk,Qk,tC,eC,rC,iC,sC,nC,oC,aC,hC,uC,cC,lC,fC,pC,dC,gC,yC,mC,vC,_C,wC,bC,xC,PC,TC,kC,SC,CC,AC,BC,FC,RC,DC,GC,MC,OC,LC,zC,NC,IC,UC,WC,jC,EC,VC,qC,HC,KC,ZC,YC,$C,JC,XC,QC,tT,eT,rT,iT,sT,nT,oT,aT,hT,uT,cT,lT,fT,pT,dT,gT,yT,mT,vT,_T,wT,bT,xT,PT,TT,kT,ST,CT,AT,BT,FT,RT,DT,GT,MT,OT,LT,zT,NT,IT,UT,WT,jT,ET,VT,qT,HT,KT,ZT,YT,$T,JT,XT,QT,tA,eA,rA,iA,sA,nA,oA,aA,hA,uA,cA,lA,fA,pA,dA,gA,yA,mA,vA,_A,wA,bA,xA,PA,TA,kA,SA,CA,AA,BA,FA,RA,DA,GA,MA,OA,LA,zA,NA,IA,UA,WA,jA,EA,VA,qA,HA,KA,ZA,YA,$A,JA,XA,QA,tE,eE,rE,iE,sE,nE,oE,aE,hE,uE,cE,lE,fE,pE,dE,gE,yE,mE,vE,_E,wE,bE,xE,PE,TE,kE,SE,CE,AE,BE,FE,RE,DE,GE,ME,OE,LE,zE,NE,IE,UE,WE,jE,EE,VE,qE,HE,KE,ZE,YE,$E,JE,XE,QE,tM,eM,rM,iM,sM,nM,oM,aM,hM,uM,cM,lM,fM,pM,dM,gM,yM,mM,vM,_M,wM,bM,xM,PM,TM,kM,SM,CM,AM,BM,FM,RM,DM,GM,MM,OM,LM,zM,NM,IM,UM,WM,jM,EM,VM,qM,HM,KM,ZM,YM,$M,JM,XM,QM,tP,eP,rP,iP,sP,nP,oP,aP,hP,uP,cP,lP,fP,pP,dP,gP,yP,mP,vP,_P,wP,bP,xP,PP,TP,kP,SP,CP,AP,BP,FP,RP,DP,GP,MP,OP,LP,zP,NP,IP,UP,WP,jP,EP,VP,qP,HP,KP,ZP,YP,$P,JP,XP,QP,tI,eI,rI,iI,sI,nI,oI,aI,hI,uI,cI,lI,fI,pI,dI,gI,yI,mI,vI,_I,wI,bI,xI,PI,TI,kI,SI,CI,AI,BI,FI,RI,DI,GI,MI,OI,LI,zI,NI,II,UI,WI,jI,EI,VI,qI,HI,KI,ZI,YI,$I,JI,XI,QI,tD,eD,rD,iD,sD,nD,oD,aD,hD,uD,cD,lD,fD,pD,dD,gD,yD,mD,vD,_D,wD,bD,xD,PD,TD,kD,SD,CD,AD,BD,FD,RD,DD,GD,MD,OD,LD,zD,ND,ID,UD,WD,jD,ED,VD,qD,HD,KD,ZD,YD,$D,JD,XD,QD,tN,eN,rN,iN,sN,nN,oN,aN,hN,uN,cN,lN,fN,pN,dN,gN,yN,mN,vN,_N,wN,bN,xN,PN,TN,kN,SN,CN,AN,BN,FN,RN,DN,GN,MN,ON,LN,zN,NN,IN,UN,WN,jN,EN,VN,qN,HN,KN,ZN,YN,$N,JN,XN,QN,tF,eF,rF,iF,sF,nF,oF,aF,hF,uF,cF,lF,fF,pF,dF,gF,yF,mF,vF,_F,wF,bF,xF,PF,TF,kF,SF,CF,AF,BF,FF,RF,DF,GF,MF,OF,LF,zF,NF,IF,UF,WF,jF,EF,VF,qF,HF,KF,ZF,YF,$F,JF,XF,QF,tO,eO,rO,iO,sO,nO,oO,aO,hO,uO,cO,lO,fO,pO,dO,gO,yO,mO,vO,_O,wO,bO,xO,PO,TO,kO,SO,CO,AO,BO,FO,RO,DO,GO,MO,OO,LO,zO,NO,IO,UO,WO,jO,EO,VO,qO,HO,KO,ZO,YO,$O,JO,XO,QO,tL,eL,rL,iL,sL,nL,oL,aL,hL,uL,cL,lL,fL,pL,dL,gL,yL,mL,vL,_L,wL,bL,xL,PL,TL,kL,SL,CL,AL,BL,FL,RL,DL,GL,ML,OL,LL,zL,NL,IL,UL,WL,jL,EL,VL,qL,HL,KL,ZL,YL,$L,JL,XL,QL,tR,eR,rR,iR,sR,nR,oR,aR,hR,uR,cR,lR,fR,pR,dR,gR,yR,mR,vR,_R,wR,bR,xR,PR,TR,kR,SR,CR,AR,BR,FR,RR,DR,GR,MR,OR,LR,zR,NR,IR,UR,WR,jR,ER,VR,qR,HR,KR,ZR,YR,$R,JR,XR,QR,tz,ez,rz,iz,sz,nz,oz,az,hz,uz,cz,lz,fz,pz,dz,gz,yz,mz,vz,_z,wz,bz,xz,Pz,Tz,kz,Sz,Cz,Az,Bz,Fz,Rz,Dz,Gz,Mz,Oz,Lz,zz,Nz,Iz,Uz,Wz,jz,Ez,Vz,qz,Hz,Kz,Zz,Yz,$z,Jz,Xz,Qz,tB,eB,rB,iB,sB,nB,oB,aB,hB,uB,cB,lB,fB,pB,dB,gB,yB,mB,vB,_B,wB,bB,xB,PB,TB,kB,SB,CB,AB,BB,FB,RB,DB,GB,MB,OB,LB,zB,NB,IB,UB,WB,jB,EB,VB,qB,HB,KB,ZB,YB,$B,JB,XB,QB,tj,ej,rj,ij,sj,nj,oj,aj,hj,uj,cj,lj,fj,pj,dj,gj,yj,mj,vj,_j,wj,bj,xj,Pj,Tj,kj,Sj,Cj,Aj,Bj,Fj,Rj,Dj,Gj,Mj,Oj,Lj,zj,Nj,Ij,Uj,Wj,jj,Ej,Vj,qj,Hj,Kj,Zj,Yj,$j,Jj,Xj,Qj,tU,eU,rU,iU,sU,nU,oU,aU,hU,uU,cU,lU,fU,pU,dU,gU,yU,mU,vU,_U,wU,bU,xU,PU,TU,kU,SU,CU,AU,BU,FU,RU,DU,GU,MU,OU,LU,zU,NU,IU,UU,WU,jU,EU,VU,qU,HU,KU,ZU,YU,$U,JU,XU,QU,tq,eq,rq,iq,sq,nq,oq,aq,hq,uq,cq,lq,fq,pq,dq,gq,yq,mq,vq,_q,wq,bq,xq,Pq,Tq,kq,Sq,Cq,Aq,Bq,Fq,Rq,Dq,Gq,Mq,Oq,Lq,zq,Nq,Iq,Uq,Wq,jq,Eq,Vq,qq,Hq,Kq,Zq,Yq,$q,Jq,Xq,Qq,tW,eW,rW,iW,sW,nW,oW,aW,hW,uW,cW,lW,fW,pW,dW,gW,yW,mW,vW,_W,wW,bW,xW,PW,TW,kW,SW,CW,AW,BW,FW,RW,DW,GW,MW,OW,LW,zW,NW,IW,UW,WW,jW,EW,VW,qW,HW,KW,ZW,YW,$W,JW,XW,QW,tH,eH,rH,iH,sH,nH,oH,aH,hH,uH,cH,lH,fH,pH,dH,gH,yH,mH,vH,_H,wH,bH,xH,PH,TH,kH,SH,CH,AH,BH,FH,RH,DH,GH,MH,OH,LH,zH,NH,IH,UH,WH,jH,EH,VH,qH,HH,KH,ZH,YH,$H,JH,XH,QH,tG,eG,rG,iG,sG,nG,oG,aG,hG,uG,cG,lG,fG,pG,dG,gG,yG,mG,vG,_G,wG,bG,xG,PG,TG,kG,SG,CG,AG,BG,FG,RG,DG,GG,MG,OG,LG,zG,NG,IG,UG,WG,jG,EG,VG,qG,HG,KG,ZG,YG,$G,JG,XG,QG,tV,eV,rV,iV,sV,nV,oV,aV,hV,uV,cV,lV,fV,pV,dV,gV,yV,mV,vV,_V,wV,bV,xV,PV,TV,kV,SV,CV,AV,BV,FV,RV,DV,GV,MV,OV,LV,zV,NV,IV,UV,WV,jV,EV,VV,qV,HV,KV,ZV,YV,$V,JV,XV,QV,tJ,eJ,rJ,iJ,sJ,nJ,oJ,aJ,hJ,uJ,cJ,lJ,fJ,pJ,dJ,gJ,yJ,mJ,vJ,_J,wJ,bJ,xJ,PJ,TJ,kJ,SJ,CJ,AJ,BJ,FJ,RJ,DJ,GJ,MJ,OJ,LJ,zJ,NJ,IJ,UJ,WJ,jJ,EJ,VJ,qJ,HJ,KJ,ZJ,YJ,$J,JJ,XJ,QJ,tK,eK,rK,iK,sK,nK,oK,aK,hK,uK,cK,lK,fK,pK,dK,gK,yK,mK,vK,_K,wK,bK,xK,PK,TK,kK,SK,CK,AK,BK,FK,RK,DK,GK,MK,OK,LK,zK,NK,IK,UK,WK,jK,EK,VK,qK,HK,KK,ZK,YK,$K,JK,XK,QK,tY,eY,rY,iY,sY,nY,oY,aY,hY,uY,cY,lY,fY,pY,dY,gY,yY,mY,vY,_Y,wY,bY,xY,PY,TY,kY,SY,CY,AY,BY,FY,RY,DY,GY,MY,OY,LY,zY,NY,IY,UY,WY,jY,EY,VY,qY,HY,KY,ZY,YY,$Y,JY,XY,QY,tZ,eZ,rZ,iZ,sZ,nZ,oZ,aZ,hZ,uZ,cZ,lZ,fZ,pZ,dZ,gZ,yZ,mZ,vZ,_Z,wZ,bZ,xZ,PZ,TZ,kZ,SZ,CZ,AZ,BZ,FZ,RZ,DZ,GZ,MZ,OZ,LZ,zZ,NZ,IZ,UZ,WZ,jZ,EZ,VZ,qZ,HZ,KZ,ZZ,YZ,$Z,JZ,XZ,QZ,tX,eX,rX,iX,sX,nX,oX,aX,hX,uX,cX,lX,fX,pX,dX,gX,yX,mX,vX,_X,wX,bX,xX,PX,TX,kX,SX,CX,AX,BX,FX,RX,DX,GX,MX,OX,LX,zX,NX,IX,UX,WX,jX,EX,VX,qX,HX,KX,ZX,YX,$X,JX,XX,QX,t$,e$,r$,i$,s$,n$,o$,a$,h$,u$,c$,l$,f$,p$,d$,g$,y$,m$,v$,_$,w$,b$,x$,P$,T$,k$,S$,C$,A$,B$,F$,R$,D$,G$,M$,O$,L$,z$,N$,I$,U$,W$,j$,E$,V$,q$,H$,K$,Z$,Y$,$$,J$,X$,Q$,tQ,eQ,rQ,iQ,sQ,nQ,oQ,aQ,hQ,uQ,cQ,lQ,fQ,pQ,dQ,gQ,yQ,mQ,vQ,_Q,wQ,bQ,xQ,PQ,TQ,kQ,SQ,CQ,AQ,BQ,FQ,RQ,DQ,GQ,MQ,OQ,LQ,zQ,NQ,IQ,UQ,WQ,jQ,EQ,VQ,qQ,HQ,KQ,ZQ,YQ,$Q,JQ,XQ,QQ;function th(t,e){for(var r=t.length,i=new ArrayBuffer(r),s=new Uint8Array(i),n=0;n<r;n+=1)s[n]=t.charCodeAt(n);return e?s:i}function eh(t){for(var e=[],r=0;r<t.length;r+=1)e[r]=String.fromCharCode(t[r]);return e.join("")}function rh(){this.protocol=new Map,this.strings=[]}function ih(t){switch(t){case"ss":return this.tSHORT;case"ul":return this.tUSHORT;case"sl":return this.tSHORT;case"l":return this.tLONG;case"h":return this.tSHORT;default:throw new Error("Cannot parse type "+t)}}function sh(t){switch(t){case"ss":return 2;case"ul":return 2;case"sl":return 2;case"l":return 4;case"h":return 2;default:throw new Error("Cannot parse type "+t)}}function nh(t,e){if(this.offset=t,this.data=e,this.view=new DataView(e.buffer,e.byteOffset),this.position=0,this.tSHORT=function(){var t=this.view.getInt16(this.position,void 0);return this.position+=2,t},this.tUSHORT=function(){var t=this.view.getUint16(this.position,void 0);return this.position+=2,t},this.tLONG=function(){var t=this.view.getInt32(this.position,void 0);return this.position+=4,t},this.offset>0){var r=this.tLONG();if(this.view.byteLength-this.offset<r)throw new Error("Illegal Argument: Unable to parse CFF font data.")}else this.offset=0}function oh(t){return new nh(0,t)}function ah(t,e){this.name=t,this.parser=e,this.type="TABLE",this.tables=[]}function hh(t){this.entries=[],t&&t.forEach(function(t){this.entries.push({tag:t.tag,value:t.value})}.bind(this))}function uh(t,e,r){return new ch(t,e,r)}function ch(t,e,r){if("string"==typeof t)this.tag=t,this.value=e;else if("number"==typeof t)if(0===e.length)this.tag=null;else{var i=String.fromCharCode(e[0],e[1],e[2],e[3]);this.tag=i,this.value=null}this.offset=r}function lh(t,e){this.parser=t,this.tableName=e,this.type="SUB"}function fh(t,e,r,i){this.name=t,this.parser=e,this.type="RECORD",this.fields=r,this.dependency=i}function ph(t,e,r,i,s,n,o){this.name=t,this.parser=e,this.type="RECORD",this.fields=r,this.dependency=i,this.count=s,this.countField=n,this.countOffset=o}function dh(t,e,r){this.name=t,this.parser=e,this.type="COVERAGE",this.dependency=r}function gh(t,e,r,i){this.name=t,this.parser=e,this.type="POST",this.fields=r,this.dependency=i}function yh(t){this.tag=t}function mh(t,e){this.value=t,this.length=void 0!==e?e:1}function vh(t){this.fields=t}function _h(t,e,r){this.name=t,this.type=e,this.description=r}var wh={};function bh(t){this.fields=t.slice()}function xh(t){this.fields=t||[]}function Ph(t){this.fields=t||[]}function Th(t,e,r){this.tag=t,this.get=e,this.font=r}function kh(t,e,r){this.tableName=t,this.scripts=e,this.font=r}function Sh(t,e,r){var i,s;if("string"==typeof t)i=t,s=e.length;else{var n=String.fromCharCode(t[0],t[1],t[2],t[3]);i=n,s=e}Th.call(this,i,s,r)}function Ch(t,e,r){this.tag=t,this.script=e,this.font=r}function Ah(t,e,r){var i,s;if("string"==typeof t)i=t,s=e.length;else{var n=String.fromCharCode(t[0],t[1],t[2],t[3]);i=n,s=e}Ch.call(this,i,s,r)}function Bh(t,e,r){this.tag=t,this.script=e,this.font=r}function Fh(t,e,r){var i,s;if("string"==typeof t)i=t,s=e;else{var n=String.fromCharCode(t[0],t[1],t[2],t[3]);i=n,s=e}Bh.call(this,i,s,r)}function Rh(t){return"number"==typeof t&&t&2}function Dh(t){this.segments=t}var Gh={},Mh=50,Oh="MAX_ITERATIONS must be a number an should be 50.";function Lh(t){if("number"!=typeof t)throw new Error(Oh);Mh=t}function zh(t){var e=t.getPoints();return e.length>2&&Nh(e)}function Nh(t){var e=Ih(t);return e<0&&(e=Math.abs(e)),e/Uh(t)<=.05}function Ih(t){for(var e=t.length,r=t[e-1][0]*t[0][1]-t[0][0]*t[e-1][1],i=1;i<e;i++)r+=t[i-1][0]*t[i][1]-t[i][0]*t[i-1][1];return.5*r}function Uh(t){for(var e=0,r=t.length,i=0;i<r;i++)e+=Math.sqrt(Math.pow(t[(i+1)%r][0]-t[i][0],2)+Math.pow(t[(i+1)%r][1]-t[i][1],2));return e}var Wh={};function jh(t,e){this.font=t,this.index=e}function Eh(t,e){this.font=t,e=e||{},this.familyName=e.familyName,this.styleName=e.styleName,this.isVariation=!!e.isVariation,this.unitsPerEm=e.unitsPerEm,this.ascender=e.ascender,this.descender=e.descender,this.createdTimestamp=e.createdTimestamp,this.tables={name:e.names||{fontFamily:{en:this.familyName},fontSubfamily:{en:this.styleName}}},this.supported=!0,this.glyphs=new a(this),this.encoding=new Gh(this),this.substitution=new Wh(this),this.kerning=0}function Vh(t,e,r,i,s){this.name=t,this.supported=e,this.xMin=r.xMin,this.xMax=r.xMax,this.yMin=r.yMin,this.yMax=r.yMax,this.unitsPerEm=s.unitsPerEm,this.ascender=s.ascender,this.descender=s.descender}var qh="1.0",Hh="opentyper.js",Kh={0:"Copyright",1:"Font Family",2:"Font Subfamily",3:"Unique ID",4:"Full Font Name",5:"Version",6:"PostScript Name",7:"Trademark",8:"Manufacturer",9:"Designer",10:"Description",11:"URL Vendor",12:"URL Designer",13:"License",14:"License URL",15:"Reserved",16:"Typographic Family",17:"Typographic Subfamily",18:"Compatible Full",19:"Sample text",20:"PostScript CID findfont name",21:"WWS Family Name",22:"WWS Subfamily Name",23:"Light Background Palette",24:"Dark Background Palette",25:"Variations PostScript Name Prefix"},Zh={};function Yh(t,e){var r;if(Array.isArray(t))r=t[0].tables.os2.fsSelection;else{var i=(r=t.tables.os2.fsSelection)&256,s=r&64;i?s?e.fontSubfamily.en="Bold Italic":e.fontSubfamily.en="Bold":s&&(e.fontSubfamily.en="Italic"),i||s||(e.fontSubfamily.en="Regular")}}function $h(t,e,r){if(!t.fsSelection&&!e.fsSelection)return r;for(var i=0,s=0;s<t.length;s++){t[s]||(i|=1<<s)}var n=t[0]?"Copyright":void 0,o=t[1]?"Family":void 0,a=t[2]?"Subfamily":void 0,h=t[3]?"UniqueID":void 0,u=t[4]?"FullName":void 0,c=t[5]?"Version":void 0,l=t[6]?"PostScriptName":void 0,f=t[7]?"Trademark":void 0,p=t[8]?"Manufacturer":void 0,d=t[9]?"Designer":void 0,g=t[10]?"Description":void 0,y=t[11]?"VendorURL":void 0,m=t[12]?"DesignerURL":void 0,v=t[13]?"License":void 0,_=t[14]?"LicenseURL":void 0,w=t[16]?"TypographicFamily":void 0,b=t[17]?"TypographicSubfamily":void 0,x=t[18]?"CompatibleFullName":void 0,P=t[19]?"SampleText":void 0,T=t[20]?"PostScriptCID":void 0,k=t[21]?"WWSFamilyName":void 0,S=t[22]?"WWSSubfamilyName":void 0,C=t[23]?"LightBackgroundPalette":void 0,A=t[24]?"DarkBackgroundPalette":void 0,B=t[25]?"VariationsPostScriptNamePrefix":void 0,F={};return n&&(F.copyright=r.copyright),o&&(F.fontFamily=r.fontFamily),a&&(F.fontSubfamily=r.fontSubfamily),h&&(F.uniqueID=r.uniqueID),u&&(F.fullName=r.fullName),c&&(F.version=r.version),l&&(F.postScriptName=r.postScriptName),f&&(F.trademark=r.trademark),p&&(F.manufacturer=r.manufacturer),d&&(F.designer=r.designer),g&&(F.description=r.description),y&&(F.vendorURL=r.vendorURL),m&&(F.designerURL=r.designerURL),v&&(F.license=r.license),_&&(F.licenseURL=r.licenseURL),w&&(F.typographicFamily=r.typographicFamily),b&&(F.typographicSubfamily=r.typographicSubfamily),x&&(F.compatibleFullName=r.compatibleFullName),P&&(F.sampleText=r.sampleText),T&&(F.postScriptCID=r.postScriptCID),k&&(F.wwsFamilyName=r.wwsFamilyName),S&&(F.wwsSubfamilyName=r.wwsSubfamilyName),C&&(F.lightBackgroundPalette=r.lightBackgroundPalette),A&&(F.darkBackgroundPalette=r.darkBackgroundPalette),B&&(F.variationsPostScriptNamePrefix=r.variationsPostScriptNamePrefix),i|e.fsSelection,F}function Jh(t){for(var e={},r=0;r<t.length;r+=1){var i=t[r];void 0===e[i.name]&&(e[i.name]={}),e[i.name][i.language]=i.value}return e}function Xh(t){var e=[],r=Object.keys(t);for(var i=0;i<r.length;i+=1)for(var s=r[i],n=t[s],o=Object.keys(n),a=0;a<o.length;a+=1){var h=o[a];e.push({name:s,language:h,value:n[h]})}}return e}function Qh(t){var e=t.match(/^((\d+)\.(\d+))(\s.*)?$/);return e?{major:parseInt(e[2]),minor:parseInt(e[3]),toString:function(){return""+this.major+"."+this.minor}}:null}function tu(t){if("Version"===t.name){var e=Qh(t.value);t.value=void 0!==e.minor?"Version "+e.major+"."+e.minor:e.major}return t}function eu(t){for(var e in t)if(t.hasOwnProperty(e))for(var r in t[e])t[e].hasOwnProperty(r)&&tu({name:e,value:t[e][r]});return t}var ru={};function iu(t,e){ru[t]=e}function su(t){var e=ru[t];if(void 0===e)throw new Error("Font format not supported: "+t);return e}function nu(t,e){var r,i=new Uint8Array(t);if(i.length<1)return su("woff2")(t,e);if(r=String.fromCharCode(i[0],i[1],i[2],i[3]),"wOFF"===r)return su("woff")(t,e);if("wOF2"===r)return su("woff2")(t,e);if("true"===r||"ttcf"===r||"\0\x01\0\0"===r||"OTTO"===r)return su("opentype")(t,e);throw new Error("Could not find a font in the provided data.")}function ou(t,e){return nu(new Uint8Array(t).buffer,e)}var au,hu,uu,cu,lu,fu,pu,du,gu,yu,mu,vu,_u,wu,bu,xu,Pu,Tu,ku,Su,Cu,Au,Bu,Fu,Ru,Du,Gu,Mu,Ou,Lu,zu,Nu,Iu,Uu,Wu,ju,Eu,Vu,qu,Hu,Ku,Zu,Yu,$u,Ju,Xu,Qu,tc,ec,rc,ic,sc,nc,oc,ac,hc,uc,cc,lc,fc,pc,dc,gc,yc,mc,vc,_c,wc,bc,xc,Pc,Tc,kc,Sc,Cc,Ac,Bc,Fc,Rc,Dc,Gc,Mc,Oc,Lc,zc,Nc,Ic,Uc,Wc,jc,Ec,Vc,qc,Hc,Kc,Zc,Yc,$c,Jc,Xc,Qc,tl,el,rl,il,sl,nl,ol,al,hl,ul,cl,ll,fl,pl,dl,gl,yl,ml,vl,_l,wl,bl,xl,Pl,Tl,kl,Sl,Cl,Al,Bl,Fl,Rl,Dl,Gl,Ml,Ol,Ll,zl,Nl,Il,Ul,Wl,jl,El,Vl,ql,Hl,Kl,Zl,Yl,$l,Jl,Xl,Ql,tf,ef,rf,if,sf,nf,of,af,hf,uf,cf,lf,ff,pf,df,gf,yf,mf,vf,_f,wf,bf,xf,Pf,Tf,kf,Sf,Cf,Af,Bf,Ff,Rf,Df,Gf,Mf,Of,Lf,zf,Nf,If,Uf,Wf,jf,Ef,Vf,qf,Hf,Kf,Zf,Yf,$f,Jf,Xf,Qf;function tp(t,e){this.font=t,this.version=e}function ep(t,e){this.font=t,e&&e.forEach(function(t){this.features[t.tag]=t.feature}.bind(this))}function rp(t,e){this.font=t,this.features=e}var ip={};function sp(t){return ip[t]}function np(t,e){ip[t]=e}var op="sfnt",ap="1.0",hp="true",up="\0\x01\0\0",cp="OTTO",lp="ttcf";e=i,e.VERSION="1.3.4",e.Glyph=jh,e.Font=Eh,e.Path=Dh,e.BoundingBox=Vh,e._b=r,e._c=s,e._d=n,e._e=o,e._f=h,e._g=u,e.cmap=Zh,e.cff=wh,e.encoding=Gh,e.tables=ip,e.parse=nu,e.load=function(t,e,r){var i;i=r?"string"==typeof t?ou:function(t,e){var r=new XMLHttpRequest;r.open("get",t,!0),r.responseType="arraybuffer",r.onload=function(){if(200===r.status){var t=r.response;e(null,t)}else e("Font could not be loaded: "+r.statusText)},r.onerror=function(){e("Font could not be loaded")},r.send()}:nu,i(t,function(t,r){if(t)return e(t);var i=nu(r);i.sourcePath=t,i.sourceType="url",e(null,i)})},e.loadSync=function(t,e){if(i=t,"undefined"!=typeof window){var r,i,s,n;if(r=(new XMLHttpRequest).open("GET",t,!1).send(null),-1===(s=["success","notmodified"]).indexOf(r.status)&&207!==r.status||(n=r.responseText),!n)throw new Error("Could not load "+t)}else{var o=require("fs");return ou(o.readFileSync(t,null),e)}return nu(ou(n,e))},c.prototype.bindConstructorValues=l,c.prototype.getMetrics=function(){var t=this.font.glyphs.get(this.index),e=this.font.tables.hmtx.hMetrics[this.index],r=this.font.tables.hhea.numberOfHMetrics;return{xMin:t.xMin,xMax:t.xMax,yMin:t.yMin,yMax:t.yMax,leftSideBearing:e.leftSideBearing,advanceWidth:e.advanceWidth>r?e.advanceWidth:this.font.tables.hmtx.leftSideBearings[this.index]}},a.prototype.get=function(t){return this.glyphs[t]||(this.glyphs[t]=new c(this.font,t)),this.glyphs[t]},a.prototype.push=function(t,e){this.glyphs[t]=e,this.length+=1},rh.prototype.I8=function(t){this.protocol.set(t,{name:t,type:"I8",size:1})},rh.prototype.U8=function(t){this.protocol.set(t,{name:t,type:"U8",size:1})},rh.prototype.I16=function(t){this.protocol.set(t,{name:t,type:"I16",size:2})},rh.prototype.U16=function(t){this.protocol.set(t,{name:t,type:"U16",size:2})},rh.prototype.I32=function(t){this.protocol.set(t,{name:t,type:"I32",size:4})},rh.prototype.U32=function(t){this.protocol.set(t,{name:t,type:"U32",size:4})},rh.prototype.F24=function(t){this.protocol.set(t,{name:t,type:"F24",size:3})},rh.prototype.F32=function(t){this.protocol.set(t,{name:t,type:"F32",size:4})},rh.prototype.STRUCT=function(t,e){var r=0;this.protocol.set(t,{name:t,type:"STRUCT",size:e.reduce(function(t,e){return this.protocol.get(e).size+t}.bind(this),0),fields:e})},rh.prototype.resolve=ih,rh.prototype.sizeof=sh,nh.prototype.from=oh,nh.prototype.parse=function(t){var e,r,i=this.offset+this.position;if(t instanceof yh){var s=this.tUSHORT();this.position-=2;var n=new nh(this.offset+this.position,this.data),o=new ah(t.tag,"",[]),a=n.parse(uh(t.tag,[[null,s]],i));o.tables=a,this.position+=s;var h=[];for(e in a)r=a[e],h.push({tag:e,value:r});return h}var u=t.length,c={};if("string"==typeof t)c=this.resolve(t);else{if(void 0===t.length){var l=this.offset+this.position,f=new nh(this.offset+this.position,this.data);c.name=t.name,c.type=t.type,c.size=0,c.offset=l,c.fields=t.fields.map(function(t){var e=f.parse(t);for(var r in c[t.name]=e,e)c.size+=e[r]?e[r].length||1:0,c.offset=f.offset+f.position;return{name:t.name,type:t.type,size:c.size,offset:c.offset}})}else if(Array.isArray(t)){for(var p,d,g=this.offset+this.position,y=0;y<u;y++)if(p=t[y],d=p[1],!p[0]||p[0]&&!c[p[0]]){var m=new nh(g+this.position,this.data);c[p[0]]=m.parse(d),this.position+=m.position}}return c},ah.prototype=Object.create(yh.prototype),ah.prototype.constructor=ah,ah.prototype.get=function(t){return this.tables.filter(function(e){return e.tag===t})},hh.prototype=Object.create(ah.prototype),hh.prototype.constructor=hh,uh.prototype=Object.create(ch.prototype),uh.prototype.constructor=uh,lh.prototype=Object.create(yh.prototype),lh.prototype.constructor=lh,fh.prototype=Object.create(yh.prototype),fh.prototype.constructor=fh,ph.prototype=Object.create(yh.prototype),ph.prototype.constructor=ph,dh.prototype=Object.create(yh.prototype),dh.prototype.constructor=dh,gh.prototype=Object.create(yh.prototype),gh.prototype.constructor=gh,mh.prototype.constructor=mh,vh.prototype.constructor=vh,wh.INDEX_TO_LOC_FORMAT=new vh([new mh("indexToLocFormat",1)]),wh.METRICS=new vh([new mh("advanceWidth"),new mh("leftSideBearing",1)]),wh.OPENTYPE_HEADER=new vh([new mh("version",4),new mh("numTables",2),new mh("searchRange",2),new mh("entrySelector",2),new mh("rangeShift",2)]),wh.TABLE_ENTRY=new vh([new mh("tag",4),new mh("checkSum",4),new mh("offset",4),new mh("length",4)]),wh.macintosh=new vh([new _h("platformID","USHORT"),new _h("encodingID","USHORT"),new _h("languageID","USHORT")]),wh.windows=new vh([new _h("platformID","USHORT"),new _h("encodingID","USHORT"),new _h("languageID","USHORT")]),wh.unicode=new vh([new _h("platformID","USHORT"),new _h("encodingID","USHORT"),new _h("languageID","USHORT")]),wh.name=new vh([new _h("format","USHORT","Format selector (=0)."),new _h("count","USHORT","The number of name records."),new _h("stringOffset","USHORT","Offset to start of string storage (from start of table).")]),wh.nameRecord=new vh([new _h("platformID","USHORT","Platform-specific encoding ID."),new _h("encodingID","USHORT","Platform-specific encoding ID."),new _h("languageID","USHORT","Language ID."),new _h("nameID","USHORT","Name ID."),new _h("length","USHORT","String length (in bytes)."),new _h("offset","USHORT","String offset from start of storage area (in bytes).")]),bh.prototype.encode=function(){for(var t=[],e=0;e<this.fields.length;e+=1){var r=this.fields[e],i=r.type,s=r.value;if("TAG"===i)t.push(dc(s));else if("USHORT"===i)t.push(ft(s));else if("SHORT"===i)t.push(pt(s));else if("ULONG"===i)t.push(dt(s));else if("LONG"===i)t.push(gt(s));else if("FIXED"===i)t=t.concat(lt(s));else if("FWORD"===i)t.push(pt(s));else if("UFWORD"===i)t.push(ft(s));else if("LONGDATETIME"===i)t=t.concat(yt(s));else if("CHAR"===i)t=t.concat(ac(s));else if("STRING"===i)t=t.concat(ac(s));else if("TABLE"===i){var n=r.value.encode();t.push(ft(n.length)),t=t.concat(n)}else if("STRUCT"===i){var o=r.value.encode();t=t.concat(o)}else if("BYTES"===i){var a=r.value;t=t.concat(a)}else"LITERAL"===i&&t.push(r.value)}return t},xh.prototype.encode=function(){for(var t=[],e=0;e<this.fields.length;e+=1){var r=this.fields[e],i=r.type,s=r.value;if("USHORT"===i)t=t.concat(ft(s));else if("SHORT"===i)t=t.concat(pt(s));else if("ULONG"===i)t=t.concat(dt(s));else if("LONG"===i)t=t.concat(gt(s));else if("BYTES"===i)t=t.concat(s);else if("CHARARRAY"===i)for(var n=0;n<s.length;n++)t=t.concat(ct(s[n]));else if("RECORD"===i){for(var o=[],a=0;a<s.length;a++){var h=s[a].encode();o=o.concat(h)}t=t.concat(o)}}return t},Ph.prototype.encode=function(){for(var t=[],e=0;e<this.fields.length;e+=1){var r=this.fields[e],i=r.type,s=r.value;if("USHORT"===i)t=t.concat(ft(s));else if("SHORT"===i)t=t.concat(pt(s));else if("ULONG"===i)t=t.concat(dt(s));else if("LONG"===i)t=t.concat(gt(s));else if("CHARARRAY"===i)for(var n=0;n<s.length;n++)t=t.concat(ct(s[n]));else if("RECORD"===i)for(var o=0;o<s.length;o++){var a=s[o].encode();t=t.concat(a)}}return t},Th.prototype=Object.create(rp.prototype),Th.prototype.constructor=Th,Sh.prototype=Object.create(Th.prototype),Sh.prototype.constructor=Sh,Ch.prototype=Object.create(ep.prototype),Ch.prototype.constructor=Ch,Ah.prototype=Object.create(Ch.prototype),Ah.prototype.constructor=Ah,Bh.prototype=Object.create(tp.prototype),Bh.prototype.constructor=Bh,Fh.prototype=Object.create(Bh.prototype),Fh.prototype.constructor=Fh,Dh.prototype.getBoundingBox=function(){for(var t=Number.POSITIVE_INFINITY,e=Number.NEGATIVE_INFINITY,r=Number.POSITIVE_INFINITY,i=Number.NEGATIVE_INFINITY,s=this.points,n=0;n<s.length;n+=1){var o=s[n];t=Math.min(t,o.x),e=Math.max(e,o.x),r=Math.min(r,o.y),i=Math.max(i,o.y)}return new Vh("BBox",{xMin:t,xMax:e,yMin:r,yMax:i})},Dh.prototype.draw=function(t){t.beginPath();for(var e=0;e<this.commands.length;e+=1){var r=this.commands[e];"M"===r.type?t.moveTo(r.x,r.y):"L"===r.type?t.lineTo(r.x,r.y):"C"===r.type?t.bezierCurveTo(r.x1,r.y1,r.x2,r.y2,r.x,r.y):"Q"===r.type?t.quadraticCurveTo(r.x1,r.y1,r.x,r.y):"Z"===r.type&&t.closePath()}},Dh.prototype.toPathData=function(t){function e(e){return Math.round(100*e)/100}var r="";t=void 0!==t?t:2;for(var i=0;i<this.commands.length;i+=1){var s=this.commands[i],n=s.x,o=s.y;if("M"===s.type)r+=s.type+e(n,t)+","+e(o,t);else if("L"===s.type)r+=s.type+e(n,t)+","+e(o,t);else if("C"===s.type){var a=s.x1,h=s.y1,u=s.x2,c=s.y2;r+=s.type+e(a,t)+","+e(h,t)+","+e(u,t)+","+e(c,t)+","+e(n,t)+","+e(o,t)}else if("Q"===s.type){var l=s.x1,f=s.y1;r+=s.type+e(l,t)+","+e(f,t)+","+e(n,t)+","+e(o,t)}else"Z"===s.type&&(r+=s.type)}return r},Dh.prototype.toSVG=function(t){var e=this.toPathData(t);return'<path d="'+e+'"/>'},Wh.findScript=function(t,e){for(var r=null,i=0;i<t.length;i++)if(t[i].tag===e){r=t[i].script;break}return r},Wh.getScriptIndex=function(t,e){for(var r=-1,i=0;i<t.length;i++)if(t[i].tag===e){r=i;break}return r},Wh.findLanguage=function(t,e){if(!t)return null;for(var r=null,i=0;i<t.script.langSysRecords.length;i++)if(t.script.langSysRecords[i].tag===e){r=t.script.langSysRecords[i].langSys;break}return r},Wh.getLanguageIndex=function(t,e){if(!t)return-1;for(var r=-1,i=0;i<t.script.langSysRecords.length;i++)if(t.script.langSysRecords[i].tag===e){r=i;break}return r},Wh.findFeature=function(t,e){if(!t)return null;for(var r=null,i=0;i<t.featureIndexes.length;i++){var s=t.featureIndexes[i],n=this.font.tables.gsub.features[s];if(n.tag===e){r=n.feature;break}}return r},Wh.getFeatureIndex=function(t,e){if(!t)return-1;for(var r=-1,i=0;i<t.featureIndexes.length;i++){var s=t.featureIndexes[i],n=this.font.tables.gsub.features[s];if(n.tag===e){r=i;break}}return r},jh.prototype.addReference=function(t,e){return this.references.push({glyphIndex:t,x:e.x,y:e.y}),this.references},jh.prototype.getBoundingBox=function(){return this.path.getBoundingBox()},jh.prototype.draw=function(t,e,r,i,s){var n;this.path.draw(t,e,r,i,s),s&&(n=this.font.glyphs.get(this.index).getMetrics(),t.beginPath(),t.rect(e,r,n.advanceWidth*i,this.font.unitsPerEm*i))},jh.prototype.drawMetrics=function(t,e,r,i){var s;e=void 0!==e?e:0,r=void 0!==r?r:0,i=void 0!==i?i:24,s=i/this.font.unitsPerEm,t.save(),t.scale(s,-s),t.translate(e/s,-r/s-this.font.ascender),t.beginPath(),t.moveTo(this.xMin,this.yMin),t.lineTo(this.xMin,this.yMax),t.lineTo(this.xMax,this.yMax),t.lineTo(this.xMax,this.yMin),t.closePath(),t.moveTo(0,this.yMin),t.lineTo(0,this.yMax),t.moveTo(this.advanceWidth,this.yMin),t.lineTo(this.advanceWidth,this.yMax),t.moveTo(this.xMin,0),t.lineTo(this.xMax,0),t.stroke(),t.restore()},jh.prototype.drawPoints=function(t,e,r,i){function s(s,n,o){t.beginPath(),t.arc(e+s*a,r+n*a,o,0,2*Math.PI),t.closePath(),t.fill()}for(var n,o=this,a=(void 0!==i?i:24)/this.font.unitsPerEm,h=this.path.commands,u=0;u<h.length;u+=1){var c=h[u];"Z"!==c.type&&(n=c.type.toUpperCase(),t.fillStyle=o.path.isIntermediatePoint(u)?"cyan":"M"===n?"blue":"L"===n?"red":"C"===n?"green":"Q"===n?"purple":"black",s(c.x,c.y,2),n="C"?(t.fillStyle="green",s(c.x1,c.y1,2),s(c.x2,c.y2,2)):n="Q"&&(t.fillStyle="purple",s(c.x1,c.y1,2)))}},jh.prototype.getContours=function(){return this.path.points.length>0?r(this.path.points,this.endPointIndices):[]},jh.prototype.getPath=function(t,e,r,i,s){var n=(r=void 0!==r?r:24)/this.font.unitsPerEm;return t=void 0!==t?t:0,e=void 0!==e?e:0,this.path.scale=n,this.path.unitsPerEm=this.font.unitsPerEm,s&&s.features?this.path.isFeatureVariation(s.features)?this.path.applyFeatures(s.features):this.path:this.path},Eh.prototype.charToGlyph=function(t){return this.charToGlyphIndex(t)?this.glyphs.get(this.charToGlyphIndex(t)):null},Eh.prototype.charToGlyphIndex=function(t){return this.encoding.charToGlyphIndex(t)},Eh.prototype.stringToGlyphs=function(t,e){for(var r=[],i=this,s=0;s<t.length;s++){var n=t[s];if(e&&e.kerning){var o=r[r.length-1];if(o){var a=i.getKerningValue(o,n);r[r.length-1].advanceWidth+=a}}r.push(this.charToGlyph(n))}if(e&&e.features)for(var h=Object.keys(e.features),u=0;u<h.length;u++){var c=h[u],l=e.features[c];if("liga"===c||"rlig"===c)for(var f=this.substitution.getLigatures(c,r),p=0;p<f.length;p++){for(var d=f[p],g=Array(d.sub.length),y=0;y<g.length;y++)g[y]=r[d.sub[y]].name;if(!(d.sub.length>1)||l)for(var m=i.glyphs.get(d.ligGlyph),v=r.slice(d.sub[0],d.sub[d.sub.length]),_=0;_<v.length;_++)v[_].advanceWidth=0;r[d.sub[0]]=m}}return r},Eh.prototype.nameToGlyph=function(t){return this.glyphs.get(this.glyphNameToIndex(t))},Eh.prototype.nameToGlyphIndex=function(t){return this.tables.post.glyphNameIndex[t]},Eh.prototype.glyphIndexToName=function(t){return this.tables.post.isSupported()?this.tables.post.glyphName(t):null},Eh.prototype.getKerningValue=function(t,e){t=t.index||t,e=e.index||e;var r=this.kerningPairs[t];return r&&r[e]?r[e]:0},Eh.prototype.forEachGlyph=function(t,e,r,i,s,n){for(var o,a,h=0;h<t.length;h+=1){var u=t[h],c=u.path.getBoundingBox();o=e+u.x,a=r+u.y,n.call(this,u,o,a,i,s,h,c)}},Eh.prototype.draw=function(t,e,r,i,s,n){var o=this.stringToGlyphs(e,s),a=this.getPath(e,0,0,i,s);a.draw(t)},Eh.prototype.drawMetrics=function(t,e,r,i,s){r=void 0!==r?r:0,i=void 0!==i?i:24,s=void 0!==s?s:{},this.draw(t,e,0,0,i,s),this.forEachGlyph(e,0,0,i,s,function(t,e,s,n){t.drawMetrics(r,e,i)})},Eh.prototype.drawPoints=function(t,e,r,i,s,n){r=void 0!==r?r:0,i=void 0!==i?i:24,n=void 0!==n?n:{},this.forEachGlyph(e,0,0,i,n,function(e,s,n,o,a){e.drawPoints(t,s,r+n,i)})},Eh.prototype.getPath=function(t,e,r,i,s){var n,o=this,a=this.stringToGlyphs(t,s);i=void 0!==i?i:72,s=void 0!==s?s:{};var h=i/this.font.unitsPerEm,u=new Dh;e=void 0!==e?e:0,r=void 0!==r?r:0;for(var c=e,l=0;l<a.length;l+=1){var f=a[l];if(f.path.commands){var p=f.getPath(c,r,i,s),d=0;if(s&&s.features&&o.substitution.hasSubstitution(s.features)){var g=o.substitution.getFeature(s.features.tags,s.features.script,s.features.language);g.map(function(t){"ligature"===t.type&&t.sub.indexOf(l)>-1&&(d=o.glyphs.get(t.ligGlyph).advanceWidth)})}u.extend(p),c+=void 0!==f.advanceWidth?f.advanceWidth*h:d*h}return n?new Error("Could not generate path.",n):u}catch(t){n=t}}finally{return n?new Error("Could not generate path.",n):u}},Eh.prototype.getPaths=function(t,e,r,i,s){var n=this,o=this.stringToGlyphs(t,s);i=void 0!==i?i:72,s=void 0!==s?s:{};var a=i/this.font.unitsPerEm,h=[];e=void 0!==e?e:0,r=void 0!==r?r:0;for(var u=e,c=0;c<o.length;c+=1){var l=o[c],f=l.getPath(u,r,i,s);h.push(f),u+=l.advanceWidth*a}return h},Eh.prototype.getAdvanceWidth=function(t,e,r){var i=this.stringToGlyphs(t,r);e=void 0!==e?e:72;for(var s=e/this.font.unitsPerEm,n=0,o=0;o<i.length;o+=1)n+=i[o].advanceWidth;return n*s},Eh.prototype.toTables=function(){var t,e=Object.keys(this.tables),r=[];for(t in e){var i=e[t];r.push(this.tables[i])}return r},Eh.prototype.toBuffer=function(){for(var t,e,r,i=this,s=new bh,n=Object.keys(this.tables).filter(function(t){return"gsub"!==t}),o=this.tables,a=[],h=[],u=0,c=0,l=n.length,f=Math.pow(2,Math.floor(Math.log(l)/Math.log(2))),p=f*Math.pow(2,4),d=Math.floor(Math.log(l)/Math.log(2)),g=Math.pow(2,4)*(l-f),y=new bh;y.fields.push({name:"version",type:"ULONG",value:1<<16}),y.fields.push({name:"numTables",type:"USHORT",value:l}),y.fields.push({name:"searchRange",type:"USHORT",value:p}),y.fields.push({name:"entrySelector",type:"USHORT",value:d}),y.fields.push({name:"rangeShift",type:"USHORT",value:g}),u+=y.encode().length;var m=new bh;for(var v=0;v<l;v++){var _=n[v];r=o[_].encode(),e=new bh,t=gc(_);for(var w=0;w<4-t.length;w++)t+=" ";e.fields.push({name:"tag",type:"CHARARRAY",value:t}),e.fields.push({name:"checkSum",type:"ULONG",value:0}),e.fields.push({name:"offset",type:"ULONG",value:u+12*l+c}),e.fields.push({name:"length",type:"ULONG",value:r.length}),c+=r.length,h.push(e.encode()),a.push(r),m=e}for(var b=y.encode(),x=0;x<h.length;x++){b=b.concat(h[x])}for(var P=0;P<a.length;P++){b=b.concat(a[P])}var T=new ArrayBuffer(b.length);return new Uint8Array(T).set(b),T},Eh.prototype.toArrayBuffer=Eh.prototype.toBuffer,Eh.prototype.download=function(t){var e=t||this.familyName+"-"+this.styleName+".otf";if(window.URL=window.webkitURL||window.URL,window.BlobBuilder=window.BlobBuilder||window.WebKitBlobBuilder||window.MozBlobBuilder,void 0!==window.URL&&void 0!==window.Blob){var r=new Blob([this.toArrayBuffer()],{type:"font/opentype"}),i=document.createElement("a");i.href=window.URL.createObjectURL(r),i.download=e,document.body.appendChild(i),i.click()}else{var s="data:font/opentype;base64,"+window.btoa(this.toBuffer());location.href=s}},Zh.unicode=function(t){var e=new bh;return e.fields.push({name:"version",type:"USHORT",value:t.version}),e.fields.push({name:"numGlyphs",type:"USHORT",value:t.numGlyphs}),e.fields.push({name:"maxPoints",type:"USHORT",value:t.maxPoints}),e.fields.push({name:"maxContours",type:"USHORT",value:t.maxContours}),e.fields.push({name:"maxCompositePoints",type:"USHORT",value:t.maxCompositePoints}),e.fields.push({name:"maxCompositeContours",type:"USHORT",value:t.maxCompositeContours}),e.fields.push({name:"maxZones",type:"USHORT",value:t.maxZones}),e.fields.push({name:"maxTwilightPoints",type:"USHORT",value:t.maxTwilightPoints}),e.fields.push({name:"maxStorage",type:"USHORT",value:t.maxStorage}),e.fields.push({name:"maxFunctionDefs",type:"USHORT",value:t.maxFunctionDefs}),e.fields.push({name:"maxInstructionDefs",type:"USHORT",value:t.maxInstructionDefs}),e.fields.push({name:"maxStackElements",type:"USHORT",value:t.maxStackElements}),e.fields.push({name:"maxSizeOfInstructions",type:"USHORT",value:t.maxSizeOfInstructions}),e.fields.push({name:"maxComponentElements",type:"USHORT",value:t.maxComponentElements}),e.fields.push({name:"maxComponentDepth",type:"USHORT",value:t.maxComponentDepth}),e.encode()},Zh.cff=function(t){var e,r,i,s,n,o,a=new bh;for(i=0;i<t.tables.length;i+=1)switch(n=t.tables[i],o=new bh,e=n.tableName,o.fields=n.fields,r=o.encode(),a.fields.push({name:e+"-size",type:"BYTES",value:ft(r.length)}),a.fields.push({name:e+"-data",type:"BYTES",value:r}),t.tableName){case"Top DICT":s=r;break;default:a.fields.push({name:e+"-data",type:"BYTES",value:r})}var h=a.encode();return h.unshift.apply(h,s),h},Zh.post=function(t){var e=new bh;e.fields.push({name:"version",type:"FIXED",value:t.version}),e.fields.push({name:"italicAngle",type:"FIXED",value:t.italicAngle}),e.fields.push({name:"underlinePosition",type:"FWORD",value:t.underlinePosition}),e.fields.push({name:"underlineThickness",type:"FWORD",value:t.underlineThickness}),e.fields.push({name:"isFixedPitch",type:"ULONG",value:t.isFixedPitch}),e.fields.push({name:"minMemType42",type:"ULONG",value:t.minMemType42}),e.fields.push({name:"maxMemType42",type:"ULONG",value:t.maxMemType42}),e.fields.push({name:"minMemType1",type:"ULONG",value:t.minMemType1}),e.fields.push({name:"maxMemType1",type:"ULONG",value:t.maxMemType1});var r=Object.keys(t.names),i=r.length;e.fields.push({name:"numberOfGlyphs",type:"USHORT",value:i});var s,n=[];for(s=0;s<r.length;s++){var o=t.names[s],a=t.names.indexOf(o);n[a]=s}e.fields.push({name:"glyphNameIndex",type:"USHORT",value:n});var h=[];for(s=0;s<r.length;s++){var u=r[s],c=ac(u);h[s]=[c.length,c]}var l=h.sort(function(t,e){return t[0]-e[0]}).map(function(t){return t[1]});return e.fields.push({name:"names",type:"CHAR",value:l}),e.encode()},Zh.os2=function(t){var e=new bh;return e.fields.push({name:"version",type:"USHORT",value:t.version}),e.fields.push({name:"xAvgCharWidth",type:"SHORT",value:t.xAvgCharWidth}),e.fields.push({name:"usWeightClass",type:"USHORT",value:t.usWeightClass}),e.fields.push({name:"usWidthClass",type:"USHORT",value:t.usWidthClass}),e.fields.push({name:"fsType",type:"USHORT",value:t.fsType}),e.fields.push({name:"ySubscriptXSize",type:"SHORT",value:t.ySubscriptXSize}),e.fields.push({name:"ySubscriptYSize",type:"SHORT",value:t.ySubscriptYSize}),e.fields.push({name:"ySubscriptXOffset",type:"SHORT",value:t.ySubscriptXOffset}),e.fields.push({name:"ySubscriptYOffset",type:"SHORT",value:t.ySubscriptYOffset}),e.fields.push({name:"ySuperscriptXSize",type:"SHORT",value:t.ySuperscriptXSize}),e.fields.push({name:"ySuperscriptYSize",type:"SHORT",value:t.ySuperscriptYSize}),e.fields.push({name:"ySuperscriptXOffset",type:"SHORT",value:t.ySuperscriptXOffset}),e.fields.push({name:"ySuperscriptYOffset",type:"SHORT",value:t.ySuperscriptYOffset}),e.fields.push({name:"yStrikeoutSize",type:"SHORT",value:t.yStrikeoutSize}),e.fields.push({name:"yStrikeoutPosition",type:"SHORT",value:t.yStrikeoutPosition}),e.fields.push({name:"sFamilyClass",type:"SHORT",value:t.sFamilyClass}),e.fields.push({name:"panose",type:"CHARARRAY",value:t.panose}),e.fields.push({name:"ulUnicodeRange1",type:"ULONG",value:t.ulUnicodeRange1}),e.fields.push({name:"ulUnicodeRange2",type:"ULONG",value:t.ulUnicodeRange2}),e.fields.push({name:"ulUnicodeRange3",type:"ULONG",value:t.ulUnicodeRange3}),e.fields.push({name:"ulUnicodeRange4",type:"ULONG",value:t.ulUnicodeRange4}),e.fields.push({name:"achVendID",type:"CHARARRAY",value:t.achVendID}),e.fields.push({name:"fsSelection",type:"USHORT",value:t.fsSelection}),e.fields.push({name:"usFirstCharIndex",type:"USHORT",value:t.usFirstCharIndex}),e.fields.push({name:"usLastCharIndex",type:"USHORT",value:t.usLastCharIndex}),e.fields.push({name:"sTypoAscender",type:"SHORT",value:t.sTypoAscender}),e.fields.push({name:"sTypoDescender",type:"SHORT",value:t.sTypoDescender}),e.fields.push({name:"sTypoLineGap",type:"SHORT",value:t.sTypoLineGap}),e.fields.push({name:"usWinAscent",type:"USHORT",value:t.usWinAscent}),e.fields.push({name:"usWinDescent",type:"USHORT",value:t.usWinDescent}),e.fields.push({name:"ulCodePageRange1",type:"ULONG",value:t.ulCodePageRange1}),e.fields.push({name:"ulCodePageRange2",type:"ULONG",value:t.ulCodePageRange2}),e.fields.push({name:"sxHeight",type:"SHORT",value:t.sxHeight}),e.fields.push({name:"sCapHeight",type:"SHORT",value:t.sCapHeight}),e.fields.push({name:"usDefaultChar",type:"USHORT",value:t.usDefaultChar}),e.fields.push({name:"usBreakChar",type:"USHORT",value:t.usBreakChar}),e.fields.push({name:"usMaxContext",type:"USHORT",value:t.usMaxContext}),e.encode()},Zh.name=function(t){var e,r,i,s=new bh,n=[],o=wh(t),a=new bh,h=[];a.fields.push({name:"format",type:"USHORT",value:0}),a.fields.push({name:"count",type:"USHORT",value:o.length}),a.fields.push({name:"stringOffset",type:"USHORT",value:6+12*o.length});var u=a.encode(),c=u.length,l=0;for(i=0;i<o.length;i+=1){var f=o[i];r=Kh.indexOf(f.name),s=new bh,s.fields.push({name:"platformID",type:"USHORT",value:1}),s.fields.push({name:"encodingID",type:"USHORT",value:0}),s.fields.push({name:"languageID",type:"USHORT",value:0}),s.fields.push({name:"nameID",type:"USHORT",value:r}),s.fields.push({name:"length",type:"USHORT",value:f.value.length}),s.fields.push({name:"offset",type:"USHORT",value:l}),l+=f.value.length,e=s.encode(),h=h.concat(e),n=n.concat(ac(f.value))}var p=h.concat(n);return u=u.concat(p),c+=p.length,u},wh.parse=function(t,e){for(var r,i,s,n,o,a,h,u=[],c={},l=0;l<t.length;l++)if(t[l])switch(r=t[l],s=r.name,n=r.value,o=e[l].offset,a=e[l].length,i=Kh[s]){case"Full Font Name":c.fullName=n;break;case"Font Family":c.fontFamily=n;break;case"Font Subfamily":c.fontSubfamily=n;break;case"Typographic Family":c.typographicFamily=n;break;case"Typographic Subfamily":c.typographicSubfamily=n;break;case"PostScript Name":c.postScriptName=n;break;case"Unique ID":c.uniqueID=n;break;case"Version":c.version=n;break;case"Description":c.description=n;break;case"Designer":c.designer=n;break;case"Designer URL":c.designerURL=n;break;case"Manufacturer":c.manufacturer=n;break;case"URL Vendor":c.vendorURL=n;break;case"Trademark":c.trademark=n;break;case"License":c.license=n;break;case"License URL":c.licenseURL=n;break;default:h=Kh.indexOf(i),u.push({name:i,value:n,platformID:1,encodingID:0,languageID:0,nameID:h,offset:o,length:a})}return{records:u,properties:c}},Zh.hhea=function(t){var e=new bh;return e.fields.push({name:"version",type:"FIXED",value:t.version}),e.fields.push({name:"ascender",type:"FWORD",value:t.ascender}),e.fields.push({name:"descender",type:"FWORD",value:t.descender}),e.fields.push({name:"lineGap",type:"FWORD",value:t.lineGap}),e.fields.push({name:"advanceWidthMax",type:"UFWORD",value:t.advanceWidthMax}),e.fields.push({name:"minLeftSideBearing",type:"FWORD",value:t.minLeftSideBearing}),e.fields.push({name:"minRightSideBearing",type:"FWORD",value:t.minRightSideBearing}),e.fields.push({name:"xMaxExtent",type:"FWORD",value:t.xMaxExtent}),e.fields.push({name:"caretSlopeRise",type:"SHORT",value:t.caretSlopeRise}),e.fields.push({name:"caretSlopeRun",type:"SHORT",value:t.caretSlopeRun}),e.fields.push({name:"caretOffset",type:"SHORT",value:t.caretOffset}),e.fields.push({name:"reserved1",type:"SHORT",value:0}),e.fields.push({name:"reserved2",type:"SHORT",value:0}),e.fields.push({name:"reserved3",type:"SHORT",value:0}),e.fields.push({name:"reserved4",type:"SHORT",value:0}),e.fields.push({name:"metricDataFormat",type:"SHORT",value:t.metricDataFormat}),e.fields.push({name:"numberOfHMetrics",type:"USHORT",value:t.numberOfHMetrics}),e.encode()},iu("opentype",function(t,e){for(var r,i,s,n,o,a,h=new DataView(t),u=[],c=0;c<h.byteLength;c+=1)u.push(h.getUint8(c));var l,f,p,d,g,y,m=new nh(0,u),v=m.parse(wh.OPENTYPE_HEADER),_=v.version,_=v.numTables,w=v.searchRange,b=v.entrySelector,x=v.rangeShift,P=[],T={},k={},S=12;for(i=0;i<_
-;i+=1){var C=m.parse(wh.TABLE_ENTRY);k[C.tag]=C,P.push(C),S+=16}for(var A,B=P.sort(function(t,e){return t.tag>e.tag?1:-1}),F=0;F<B.length;F+=1){var R,D=B[F];switch(D.tag){case"cmap":g=D.offset;break;case"head":A=D.offset;break;case"hhea":d=D.offset;break;case"hmtx":y=D.offset;break;case"maxp":p=D.offset;break;case"name":l=D.offset;break;case"OS/2":f=D.offset;break;case"post":void 0;break;case"fpgm":break;case"loca":void 0;break;case"glyf":void 0;break;case"CFF ":void 0;break;case"CFF2":void 0;break;case"kern":void 0;break;case"DSIG":break;case"prep":break;case"cvt ":void 0;break;case"gasp":void 0;break;case"GDEF":void 0;break;case"GPOS":void 0;break;case"GSUB":void 0;break;case"meta":void 0;break;default:void 0}}for(i=0;i<B.length;i+=1){var G,M=B[i],O=M.tag;switch(O){case"cmap":break;case"head":break;case"hhea":break;case"hmtx":break;case"maxp":break;case"name":break;case"OS/2":break;case"post":break;default:var L=new nh(M.offset,u);R=void 0,T[M.tag]=R}if(k.glyf&&k.loca){var z,N=new nh(k.head.offset,u),I=N.parse(wh.INDEX_TO_LOC_FORMAT),U=I.indexToLocFormat,W=new nh(k.loca.offset,u),j=[];if(0===U)for(var E=W.tUSHORT,V=0;V<k.maxp.length;V+=1)z=E(),j.push(2*z);else for(var q=W.tULONG,H=0;H<k.maxp.length;H+=1)z=q(),j.push(z);for(var K=new nh(k.glyf.offset,u),Z=0;Z<j.length;Z+=1){var Y=j[Z],$=j[Z+1];$>Y&&K.parse()}}var J=T.head.unitsPerEm,X=new Eh({unitsPerEm:J,ascender:T.hhea.ascender,descender:T.hhea.descender}),Q=X.tables;for(r in T){var tt=T[r];Q[r]=tt}return e&&"function"==typeof e.lowMemory?X:X}),au=function(t,e){var r,i=t.tSHORT,s=t.tUSHORT,n=t.tLONG,o=t.tULONG,a=t.tCHAR,h=t.tFIXED,u=t.tFWORD,c=t.tUFWORD,l=t.tLONGDATETIME,f=t.tTABLE;t.tableName=e;var p,d,g,y,m,v,_,w,b,x,P,T,k,S,C,A,B,F,R,D,G,M,O,L,z,N,I,U,W,j,E;switch(e){case"cmap":for(p=s(),d=s(),g=[],y=0;y<d;y++)g.push({platformID:s(),encodingID:s(),offset:o()});m={version:p,numTables:d,tables:g};var v={};for(y=0;y<d;y++)switch(g[y].platformID){case 1:switch(g[y].encodingID){case 0:v.macintosh=g[y];break;default:v.macintosh=g[y]}break;case 3:switch(g[y].encodingID){case 1:v.windows=g[y];break;case 10:v.windows=g[y];break;default:v.windows=g[y]}break;case 0:v.unicode=g[y]}if(v.windows)for(var V=new nh(t.offset+v.windows.offset,t.data),q=V.tUSHORT(),H=V.tUSHORT(),K=V.tUSHORT(),Z=V.tUSHORT(),Y=V.tUSHORT(),$=V.tUSHORT(),J=V.tUSHORT(),X=V.tUSHORT(),Q=[],y=0;y<X;y++)Q.push(V.tUSHORT());var tt=V.tUSHORT();if(tt){for(var et=[],y=0;y<X;y++)et.push(V.tUSHORT());for(var rt=[],y=0;y<X;y++)rt.push(V.tUSHORT());for(var it=[],y=0;y<X;y++)it.push(V.tUSHORT());for(var st={},y=0;y<X;y++){var nt=Q[y],ot=et[y],at=rt[y],ht=it[y];for(var ut=nt;ut<ot;ut++)st[ut]=ut+at}}r=m;break;case"head":r={version:h(),fontRevision:h(),checkSumAdjustment:o(),magicNumber:o(),flags:s(),unitsPerEm:s(),created:l(),modified:l(),xMin:u(),yMin:u(),xMax:u(),yMax:u(),macStyle:s(),lowestRecPPEM:s(),fontDirectionHint:i(),indexToLocFormat:i(),glyphDataFormat:i()};break;case"hhea":r={version:h(),ascender:u(),descender:u(),lineGap:u(),advanceWidthMax:c(),minLeftSideBearing:u(),minRightSideBearing:u(),xMaxExtent:u(),caretSlopeRise:i(),caretSlopeRun:i(),caretOffset:i(),reserved1:i(),reserved2:i(),reserved3:i(),reserved4:i(),metricDataFormat:i(),numberOfHMetrics:s()};break;case"hmtx":r={};break;case"maxp":var ct;r={version:h(),numGlyphs:s()},(ct=r.version)>=1&&(r.maxPoints=s(),r.maxContours=s(),r.maxCompositePoints=s(),r.maxCompositeContours=s(),r.maxZones=s(),r.maxTwilightPoints=s(),r.maxStorage=s(),r.maxFunctionDefs=s(),r.maxInstructionDefs=s(),r.maxStackElements=s(),r.maxSizeOfInstructions=s(),r.maxComponentElements=s(),r.maxComponentDepth=s());break;case"name":var lt,ft;r={},lt=s(),r.format=lt,ft=s(),r.count=ft,r.stringOffset=s();for(var pt=[],y=0;y<ft;y++)pt.push({platformID:s(),encodingID:s(),languageID:s(),nameID:s(),length:s(),offset:s()});for(var dt=t.offset+r.stringOffset,gt=[],y=0;y<pt.length;y++){var yt=new nh(dt+pt[y].offset,t.data),mt=yt.parse({length:pt[y].length}),vt=decode.UTF8(mt);gt.push({name:Kh[pt[y].nameID],value:vt})}r.records=gt;break;case"OS/2":var _t,wt,bt,xt;r={version:s(),xAvgCharWidth:i(),usWeightClass:s(),usWidthClass:s(),fsType:s(),ySubscriptXSize:i(),ySubscriptYSize:i(),ySubscriptXOffset:i(),ySubscriptYOffset:i(),ySuperscriptXSize:i(),ySuperscriptYSize:i(),ySuperscriptXOffset:i(),ySuperscriptYOffset:i(),yStrikeoutSize:i(),yStrikeoutPosition:i(),sFamilyClass:i()},(wt=t.tCHAR(10)).forEach(function(t,e){r["panose"+e]=t}),r.ulUnicodeRange1=o(),r.ulUnicodeRange2=o(),r.ulUnicodeRange3=o(),r.ulUnicodeRange4=o(),r.achVendID=a(4),r.fsSelection=s(),r.usFirstCharIndex=s(),r.usLastCharIndex=s(),r.sTypoAscender=i(),r.sTypoDescender=i(),r.sTypoLineGap=i(),r.usWinAscent=s(),r.usWinDescent=s(),r.version>=1&&(r.ulCodePageRange1=o(),r.ulCodePageRange2=o()),r.version>=2&&(r.sxHeight=i(),r.sCapHeight=i(),r.usDefaultChar=s(),r.usBreakChar=s(),r.usMaxContext=s()),r.version>=5&&(r.usLowerOpticalPointSize=s(),r.usUpperOpticalPointSize=s());break;case"post":var Pt,Tt,kt;for(r={version:h(),italicAngle:h(),underlinePosition:u(),underlineThickness:u(),isFixedPitch:o(),minMemType42:o(),maxMemType42:o(),minMemType1:o(),maxMemType1:o()},Tt=new nh(t.offset+32,t.data),Pt=t.offset+32+Tt.position,r.names=[],y=0;y<256;y++)r.names.push(ce[y]);if(49152==(kt=new nh(Pt,t.data)).tUSHORT()){for(var St=kt.tUSHORT(),Ct=0;Ct<St;Ct++){var At=kt.tUSHORT(),Bt=ce[At];r.names.push(Bt)}}else if(81920==(kt=new nh(Pt,t.data)).tUSHORT()){var Ft=kt.tUSHORT(),Rt=new nh(Pt,t.data);for(y=0;y<Ft;y++){var Dt=Rt.tCHAR(),Gt=String.fromCharCode(Dt);r.names.push(Gt)}}break;case"CFF ":var Mt=new nh(t.offset,t.data);r=wh.parse(Mt),r.tables.forEach(function(t){"Top DICT"===t.tableName});break;case"GSUB":for(var Ot=new nh(t.offset,t.data),Lt=Ot.tUSHORT(),zt=Ot.tUSHORT(),Nt=Ot.tUSHORT(),It=Ot.tUSHORT(),Ut=Ot.tUSHORT(),Wt=Ot.tUSHORT(),jt=Ot.tUSHORT(),Et=new rp(null,{}),Vt=0;Vt<jt;Vt++){var qt=Ot.tUSHORT(),Ht=Ot.tUSHORT();Et[String.fromCharCode(qt)]=Ht}var Kt=new tp(null,Lt+"."+zt);r=new kh(null,{scripts:Kt.scripts,features:Et},null),Et=r.features;var Zt=new lh("scriptListOffset","scriptList",t,Ot,Kt),Yt=new lh("featureListOffset","featureList",t,Ot,Kt),$t=new lh("lookupListOffset","lookupList",t,Ot,Kt);r=Zt,r=Yt,r=$t;for(var Jt=new nh(t.offset+Nt,t.data),Xt=[],Qt=0;Qt<Wt;Qt++){var te=Jt.tUSHORT(),ee=Jt.tUSHORT();Xt.push({tag:te,offset:ee})}for(var re=0;re<Xt.length;re++){var ie=new nh(t.offset+Nt+Xt[re].offset,t.data),se=ie.tUSHORT(),ne=ie.tUSHORT(),oe=ie.tUSHORT();for(Vt=0;Vt<ne;Vt++){var ae=ie.tUSHORT();Xt[re][Vt]=ae}}var he=new nh(t.offset+It,t.data),ue=new dh("coverage",t,he);for(Qt=0;Qt<ue.length;Qt++){var ce=he.tUSHORT(),le=he.tUSHORT();for(var fe=0;fe<le;fe++){var pe=he.tUSHORT();ue[Qt][fe]=pe}}for(var de=new nh(t.offset+Ut,t.data),ge=[],ye=0;ye<Xt.length;ye++){var me=new nh(t.offset+Ut+Xt[ye].offset,t.data);switch(Xt[ye].tag){case 1:for(var ve=me.tUSHORT(),_e=me.tUSHORT(),we=me.tUSHORT(),be=0;be<we;be++){var xe=me.tUSHORT();ge[ye]=xe}break;case 4:for(var Pe=me.tUSHORT(),Te=me.tUSHORT(),ke=me.tUSHORT(),Se=0;Se<ke;Se++){var Ce=me.tUSHORT(),Ae=me.tUSHORT();ge[ye]={ligature:Ce,components:Ae}}break;default:void 0}}r.lookups=ge;break;case"fpgm":case"loca":case"glyf":case"kern":case"DSIG":case"prep":case"cvt ":case"gasp":case"GDEF":case"GPOS":case"meta":break;default:void 0}return r},hu=function(t){this.font=t},uu=function(t){this.font=t},cu=function(t,e){this.font=t,this.tables=e},lu=function(t,e){this.font=t,this.version=e,this.tables=e},fu=function(t,e){this.font=t,this.tables=e},pu=function(t,e){this.font=t,this.version=e,this.tables=e},du=function(t,e){this.font=t,this.version=e,this.tables=e},gu=function(t,e){this.font=t,this.tables=e},yu=function(t,e){this.font=t,this.tables=e},mu=function(t,e){this.font=t,this.tables=e},vu=function(t,e){this.font=t,this.version=e,this.tables=e},_u=function(t,e){this.font=t,this.version=e,this.tables=e},wu=function(t,e){this.font=t,this.version=e,this.tables=e},bu=function(t,e){this.font=t,this.tables=e},xu=function(t,e){this.font=t,this.version=e,this.tables=e},Pu=function(t,e){this.font=t,this.version=e,this.tables=e},Tu=function(t,e){this.font=t,this.version=e,this.tables=e},ku=function(t,e){this.font=t,this.version=e,this.tables=e},Su=function(t,e){this.font=t,this.version=e,this.tables=e},Cu=function(t,e){this.font=t,this.tables=e},Au=function(t,e){this.font=t,this.version=e,this.tables=e},Bu=function(t,e){this.font=t,this.version=e,this.tables=e},Fu=function(t,e){this.font=t,this.version=e,this.tables=e},Ru=function(t,e){this.font=t,this.version=e,this.tables=e},Du=function(t,e){this.font=t,this.version=e,this.tables=e},Gu=function(t,e){this.font=t,this.version=e,this.tables=e},Mu=function(t,e){this.font=t,this.version=e,this.tables=e},Ou=function(t,e){this.font=t,this.version=e,this.tables=e},Lu=function(t,e){this.font=t,this.version=e,this.tables=e},zu=function(t,e){this.font=t,this.version=e,this.tables=e},Nu=function(t,e){this.font=t,this.version=e,this.tables=e},Iu=function(t,e){this.font=t,this.version=e,this.tables=e},Uu=function(t,e){this.font=t,this.version=e,this.tables=e},Wu=function(t,e){this.font=t,this.version=e,this.tables=e},ju=function(t,e){this.font=t,this.version=e,this.tables=e},Eu=function(t,e){this.font=t,this.version=e,this.tables=e},Vu=function(t,e){this.font=t,this.version=e,this.tables=e},qu=function(t,e){this.font=t,this.version=e,this.tables=e},Hu=function(t,e){this.font=t,this.version=e,this.tables=e},Ku=function(t,e){this.font=t,this.version=e,this.tables=e},Zu=function(t,e){this.font=t,this.version=e,this.tables=e},Yu=function(t,e){this.font=t,this.version=e,this.tables=e},$u=function(t,e){this.font=t,this.version=e,this.tables=e},Ju=function(t,e){this.font=t,this.version=e,this.tables=e},Xu=function(t,e){this.font=t,this.version=e,this.tables=e},Qu=function(t,e){this.font=t,this.version=e,this.tables=e},tc=function(t,e){this.font=t,this.version=e,this.tables=e},ec=function(t,e){this.font=t,this.version=e,this.tables=e},rc=function(t,e){this.font=t,this.version=e,this.tables=e},ic=function(t,e){this.font=t,this.version=e,this.tables=e},sc=function(t,e){this.font=t,this.version=e,this.tables=e},nc=function(t,e){this.font=t,this.version=e,this.tables=e},oc=function(t,e){this.font=t,this.version=e,this.tables=e},ac=function(t,e){this.font=t,this.version=e,this.tables=e},hc=function(t,e){this.font=t,this.version=e,this.tables=e},uc=function(t,e){this.font=t,this.version=e,this.tables=e},cc=function(t,e){this.font=t,this.version=e,this.tables=e},lc=function(t,e){this.font=t,this.version=e,this.tables=e},fc=function(t,e){this.font=t,this.version=e,this.tables=e},pc=function(t,e){this.font=t,this.version=e,this.tables=e},dc=function(t,e){this.font=t,this.version=e,this.tables=e},gc=function(t,e){this.font=t,this.version=e,this.tables=e},yc=function(t,e){this.font=t,this.version=e,this.tables=e},mc=function(t,e){this.font=t,this.version=e,this.tables=e},vc=function(t,e){this.font=t,this.version=e,this.tables=e},_c=function(t,e){this.font=t,this.version=e,this.tables=e},wc=function(t,e){this.font=t,this.version=e,this.tables=e},bc=function(t,e){this.font=t,this.version=e,this.tables=e},xc=function(t,e){this.font=t,this.version=e,this.tables=e},Pc=function(t,e){this.font=t,this.version=e,this.tables=e},Tc=function(t,e){this.font=t,this.version=e,this.tables=e},kc=function(t,e){this.font=t,this.version=e,this.tables=e},Sc=function(t,e){this.font=t,this.version=e,this.tables=e},Cc=function(t,e){this.font=t,this.version=e,this.tables=e},Ac=function(t,e){this.font=t,this.version=e,this.tables=e},Bc=function(t,e){this.font=t,this.version=e,this.tables=e},Fc=function(t,e){this.font=t,this.version=e,this.tables=e},Rc=function(t,e){this.font=t,this.version=e,this.tables=e},Dc=function(t,e){this.font=t,this.version=e,this.tables=e},Gc=function(t,e){this.font=t,this.version=e,this.tables=e},Mc=function(t,e){this.font=t,this.version=e,this.tables=e},Oc=function(t,e){this.font=t,this.version=e,this.tables=e},Lc=function(t,e){this.font=t,this.version=e,this.tables=e},zc=function(t,e){this.font=t,this.version=e,this.tables=e},Nc=function(t,e){this.font=t,this.version=e,this.tables=e},Ic=function(t,e){this.font=t,this.version=e,this.tables=e},Uc=function(t,e){this.font=t,this.version=e,this.tables=e},Wc=function(t,e){this.font=t,this.version=e,this.tables=e},jc=function(t,e){this.font=t,this.version=e,this.tables=e},Ec=function(t,e){this.font=t,this.version=e,this.tables=e},Vc=function(t,e){this.font=t,this.version=e,this.tables=e},qc=function(t,e){this.font=t,this.version=e,this.tables=e},Hc=function(t,e){this.font=t,this.version=e,this.tables=e},Kc=function(t,e){this.font=t,this.version=e,this.tables=e},Zc=function(t,e){this.font=t,this.version=e,this.tables=e},Yc=function(t,e){this.font=t,this.version=e,this.tables=e},$c=function(t,e){this.font=t,this.version=e,this.tables=e},Jc=function(t,e){this.font=t,this.version=e,this.tables=e},Xc=function(t,e){this.font=t,this.version=e,this.tables=e},Qc=function(t,e){this.font=t,this.version=e,this.tables=e},tl=function(t,e){this.font=t,this.version=e,this.tables=e},el=function(t,e){this.font=t,this.version=e,this.tables=e},rl=function(t,e){this.font=t,this.version=e,this.tables=e},il=function(t,e){this.font=t,this.version=e,this.tables=e},sl=function(t,e){this.font=t,this.version=e,this.tables=e},nl=function(t,e){this.font=t,this.version=e,this.tables=e},ol=function(t,e){this.font=t,this.version=e,this.tables=e},al=function(t,e){this.font=t,this.version=e,this.tables=e},hl=function(t,e){this.font=t,this.version=e,this.tables=e},ul=function(t,e){this.font=t,this.version=e,this.tables=e},cl=function(t,e){this.font=t,this.version=e,this.tables=e},ll=function(t,e){this.font=t,this.version=e,this.tables=e},fl=function(t,e){this.font=t,this.version=e,this.tables=e},pl=function(t,e){this.font=t,this.version=e,this.tables=e},dl=function(t,e){this.font=t,this.version=e,this.tables=e},gl=function(t,e){this.font=t,this.version=e,this.tables=e},yl=function(t,e){this.font=t,this.version=e,this.tables=e},ml=function(t,e){this.font=t,this.version=e,this.tables=e},vl=function(t,e){this.font=t,this.version=e,this.tables=e},_l=function(t,e){this.font=t,this.version=e,this.tables=e},wl=function(t,e){this.font=t,this.version=e,this.tables=e},bl=function(t,e){this.font=t,this.version=e,this.tables=e},xl=function(t,e){this.font=t,this.version=e,this.tables=e},Pl=function(t,e){this.font=t,this.version=e,this.tables=e},Tl=function(t,e){this.font=t,this.version=e,this.tables=e},kl=function(t,e){this.font=t,this.version=e,this.tables=e},Sl=function(t,e){this.font=t,this.version=e,this.tables=e},Cl=function(t,e){this.font=t,this.version=e,this.tables=e},Al=function(t,e){this.font=t,this.version=e,this.tables=e},Bl=function(t,e){this.font=t,this.version=e,this.tables=e},Fl=function(t,e){this.font=t,this.version=e,this.tables=e},Rl=function(t,e){this.font=t,this.version=e,this.tables=e},Dl=function(t,e){this.font=t,this.version=e,this.tables=e},Gl=function(t,e){this.font=t,this.version=e,this.tables=e},Ml=function(t,e){this.font=t,this.version=e,this.tables=e},Ol=function(t,e){this.font=t,this.version=e,this.tables=e},Ll=function(t,e){this.font=t,this.version=e,this.tables=e},zl=function(t,e){this.font=t,this.version=e,this.tables=e},Nl=function(t,e){this.font=t,this.version=e,this.tables=e},Il=function(t,e){this.font=t,this.version=e,this.tables=e},Ul=function(t,e){this.font=t,this.version=e,this.tables=e},Wl=function(t,e){this.font=t,this.version=e,this.tables=e},jl=function(t,e){this.font=t,this.version=e,this.tables=e},El=function(t,e){this.font=t,this.version=e,this.tables=e},Vl=function(t,e){this.font=t,this.version=e,this.tables=e},ql=function(t,e){this.font=t,this.version=e,this.tables=e},Hl=function(t,e){this.font=t,this.version=e,this.tables=e},Kl=function(t,e){this.font=t,this.version=e,this.tables=e},Zl=function(t,e){this.font=t,this.version=e,this.tables=e},Yl=function(t,e){this.font=t,this.version=e,this.tables=e},$l=function(t,e){this.font=t,this.version=e,this.tables=e},Jl=function(t,e){this.font=t,this.version=e,this.tables=e},Xl=function(t,e){this.font=t,this.version=e,this.tables=e},Ql=function(t,e){this.font=t,this.version=e,this.tables=e},tf=function(t,e){this.font=t,this.version=e,this.tables=e},np("cmap",hu),np("head",uu),np("hhea",cu),np("hmtx",fu),np("maxp",pu),np("name",du),np("OS/2",gu),np("post",yu),np("CFF ",mu),np("CFF2",vu),np("loca",_u),np("glyf",wu),np("kern",bu),np("gasp",xu),np("GDEF",Pu),np("GPOS",Tu),np("GSUB",ku),np("fpgm",Su),np("prep",Cu),np("cvt ",Au),np("DSIG",Bu),np("meta",Fu),np("ltag",Ru),np("avar",Du),np("cvar",Gu),np("fvar",Mu),np("gvar",Ou),np("HVAR",Lu),np("MVAR",zu),np("VVAR",Nu),np("STAT",Iu),np("BASE",Uu),np("JSTF",Wu),np("MATH",ju),np("COLR",Eu),np("CPAL",Vu),np("SVG ",qu),np("sbix",Hu),np("acnt",Ku),np("ankr",Zu),np("bdat",Yu),np("bhed",$u),np("bloc",Ju),np("bsln",Qu),np("EBDT",tc),np("EBLC",ec),np("EBSC",rc),np("feat",Xu),np("fdsc",ic),np("fmtx",sc),np("fond",nc),np("gcid",oc),np("hdmx",ac),np("just",hc),np("lcar",uc),np("ltag",cc),np("mort",lc),np("opbd",fc),np("prop",pc),np("trak",dc),np("vhea",gc),np("vmtx",yc),np("VORG",mc),np("Zapf",vc),np("SILF",_c),np("Sill",wc),np("Glat",bc),np("Gloc",xc),np("Feat",Pc),np("Ltag",Tc),np("mort",kc),np("morx",Sc),np("just",Cc),np("kerx",Ac),np("opbd",Bc),np("prop",Fc),np("trak",Rc),np("lcar",Dc),np("xref",Gc),np("fmtx",Mc),np("gvar",Oc),np("cvar",Lc),np("avar",zc),np("VVAR",Nc),np("HVAR",Ic),np("MVAR",Uc),np("STAT",Wc),np("ltag",jc),np("sbix",Ec),np("COLR",Vc),np("CPAL",qc),np("SVG ",Hc),np("hdmx",Kc),np("head",Zc),np("hhea",Yc),np("maxp",$c),np("OS/2",Jc),np("name",Xc),np("cmap",Qc),np("post",lu)}));</script>
-
-    <div id="app">
-        <header class="app-header">
-            <h1>カスタムフォントビューア</h1>
-            <div class="header-controls">
-                <button id="reset-btn" class="btn btn-secondary" style="display: none;">別のフォントを選ぶ</button>
-                <button id="theme-toggle" class="theme-switch">
-                    <span id="theme-icon"></span>
-                </button>
+    <div class="container">
+        <!-- ===== SIDEBAR - CONTROLS ===== -->
+        <aside class="sidebar">
+            
+            <div id="drop-zone" class="control-group">
+                <p>フォントファイル(TTF, OTF, TTC, WOFF/2)をここにドラッグ＆ドロップ<br>またはクリックして選択</p>
+                <input type="file" id="file-input" accept=".ttf,.otf,.ttc,.woff,.woff2">
             </div>
-        </header>
 
-        <div id="drop-zone">
-            <div class="drop-content">
-                <div id="loader" class="loader" style="display: none; margin: 0 auto 20px;"></div>
-                <div id="drop-text">
-                    <h2>フォントファイルをここにドロップ</h2>
-                    <p>またはクリックしてファイルを選択 (TTF, OTF, WOFF, WOFF2, TTC)</p>
-                    <label for="font-file-input" class="btn">ファイルを選択</label>
-                    <input type="file" id="font-file-input" accept=".ttf,.otf,.woff,.woff2,.ttc">
+            <div id="status-container"></div>
+            
+            <div id="ttc-selector" class="control-group">
+                <h3>TrueType Collection (TTC)</h3>
+                <label for="font-choice">ファイル内に複数のフォントが含まれています。プレビューするフォントを選択してください。</label>
+                <select id="font-choice"></select>
+            </div>
+
+            <div id="font-info-container" class="control-group" style="display: none;">
+                <h3>フォント情報</h3>
+                <div id="font-info"><ul></ul></div>
+            </div>
+
+            <div class="control-group">
+                <h3>プレビューテキスト</h3>
+                <textarea id="text-input">The quick brown fox jumps over the lazy dog. 1234567890</textarea>
+            </div>
+
+            <div class="control-group">
+                <h3>表示設定</h3>
+                <div class="slider-container">
+                    <label for="font-size">サイズ</label>
+                    <input type="range" id="font-size" min="8" max="200" value="48">
+                    <output for="font-size">48</output><span>px</span>
                 </div>
-                <div id="error-message" style="display: none; color: #e74c3c;"></div>
+                <div class="slider-container">
+                    <label for="line-height">行間</label>
+                    <input type="range" id="line-height" min="0.5" max="3" value="1.4" step="0.1">
+                    <output for="line-height">1.4</output>
+                </div>
             </div>
-        </div>
+            
+            <div id="feature-controls-container" class="control-group" style="display: none;">
+                <h3>OpenType 機能</h3>
+                <div id="feature-controls"></div>
+            </div>
+            
+            <div id="variable-axes-container" class="control-group" style="display: none;">
+                <h3>バリアブルフォント軸</h3>
+                <div id="variable-axes-controls"></div>
+            </div>
+        </aside>
 
-        <main id="viewer" class="hidden">
-            <aside class="sidebar">
-                <div class="control-group">
-                    <h3>フォント情報</h3>
-                    <div id="font-info">
-                         <table class="info-table">
-                            <tbody>
-                                <tr><td>ファイル名</td><td id="info-filename"></td></tr>
-                                <tr><td>ファミリー</td><td id="info-family"></td></tr>
-                                <tr><td>スタイル</td><td id="info-style"></td></tr>
-                                <tr><td>バージョン</td><td id="info-version"></td></tr>
-                                <tr><td>グリフ数</td><td id="info-glyphs"></td></tr>
-                            </tbody>
-                        </table>
+        <!-- ===== MAIN CONTENT - PREVIEW ===== -->
+        <main class="main-content">
+            <div id="preview-area">
+                <div class="preview-wrapper">
+                    <div id="preview-text">
+                        <div class="placeholder-text">ここにフォントファイルをドラッグ＆ドロップしてください</div>
                     </div>
                 </div>
-
-                <div class="control-group" id="ttc-selector-group" style="display:none;">
-                    <h3>フォントコレクション (TTC)</h3>
-                    <select id="ttc-selector"></select>
-                </div>
-
-                <div class="control-group">
-                    <h3>テキスト設定</h3>
-                    <label for="font-size-slider">文字サイズ: <span id="font-size-value">48</span>px</label>
-                    <input type="range" id="font-size-slider" min="12" max="200" value="48">
-                </div>
                 
-                <div class="control-group" id="variable-font-controls" style="display:none;">
-                    <h3>バリアブルフォント設定</h3>
-                    <div id="variable-axes"></div>
-                </div>
+                <div id="extra-previews" style="display: none;">
+                    <div class="preview-wrapper">
+                        <h3>ウォーターフォール</h3>
+                        <div id="waterfall-display"></div>
+                    </div>
 
-            </aside>
-            <div class="preview-area">
-                <div class="preview-controls">
-                     <select id="sample-text-selector" class="styled-select">
-                        <option value="custom">カスタムテキスト</option>
-                        <option value="pangram_en">Pangram (English)</option>
-                        <option value="pangram_jp">いろは歌・鳥啼歌</option>
-                        <option value="hiragana">ひらがな</option>
-                        <option value="katakana">カタカナ</option>
-                        <option value="alphanumeric">英数字・記号</option>
-                        <option value="glyphs">グリフマップ</option>
-                    </select>
-                </div>
-                <div class="preview-content">
-                    <textarea id="preview-text-input" spellcheck="false"></textarea>
-                    <div id="glyph-map-container">
+                    <div class="preview-wrapper">
+                        <h3>グリフマップ (最初の500文字)</h3>
                         <div id="glyph-map"></div>
                     </div>
                 </div>
             </div>
         </main>
     </div>
+
+<script>
+// opentype.jsがグローバルにロードされていることを確認
+if (typeof opentype === 'undefined') {
+    alert('Error: opentype.js could not be loaded. Please check your internet connection.');
+}
+
+// ===== DOM Element References =====
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const statusContainer = document.getElementById('status-container');
+const ttcSelector = document.getElementById('ttc-selector');
+const fontChoice = document.getElementById('font-choice');
+const fontInfoContainer = document.getElementById('font-info-container');
+const fontInfo = document.getElementById('font-info');
+const textInput = document.getElementById('text-input');
+const fontSizeSlider = document.getElementById('font-size');
+const lineHeightSlider = document.getElementById('line-height');
+const previewText = document.getElementById('preview-text');
+const extraPreviews = document.getElementById('extra-previews');
+const waterfallDisplay = document.getElementById('waterfall-display');
+const glyphMap = document.getElementById('glyph-map');
+const featureControlsContainer = document.getElementById('feature-controls-container');
+const featureControls = document.getElementById('feature-controls');
+const variableAxesContainer = document.getElementById('variable-axes-container');
+const variableAxesControls = document.getElementById('variable-axes-controls');
+
+// ===== State Management =====
+let currentFont = null;
+let fontCollection = []; // For TTC files
+let currentFontBuffer = null;
+const FONT_FAMILY_NAME = 'CustomFontPreview';
+
+// ===== Event Listeners =====
+
+// --- File Drop/Select ---
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('dragover');
+});
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    const files = e.dataTransfer.files;
+    if (files.length) {
+        handleFile(files[0]);
+    }
+});
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => {
+    if (fileInput.files.length) {
+        handleFile(fileInput.files[0]);
+    }
+});
+
+// --- UI Controls ---
+textInput.addEventListener('input', updatePreview);
+fontSizeSlider.addEventListener('input', (e) => {
+    e.target.nextElementSibling.value = e.target.value;
+    updatePreview();
+});
+lineHeightSlider.addEventListener('input', (e) => {
+    e.target.nextElementSibling.value = e.target.value;
+    updatePreview();
+});
+fontChoice.addEventListener('change', () => {
+    const selectedIndex = fontChoice.value;
+    if (fontCollection[selectedIndex]) {
+        currentFont = fontCollection[selectedIndex];
+        updateUIForNewFont();
+    }
+});
+
+// ===== Core Functions =====
+
+/**
+ * Handles the selected/dropped file
+ * @param {File} file
+ */
+function handleFile(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        currentFontBuffer = e.target.result;
+        try {
+            // opentype.js can parse a buffer and returns an array for TTC
+            const fonts = opentype.parse(currentFontBuffer, { lowMemory: true });
+            resetUI();
+
+            if (Array.isArray(fonts)) { // It's a TTC
+                fontCollection = fonts;
+                populateTtcSelector(fontCollection);
+                ttcSelector.style.display = 'block';
+                // Load the first font by default
+                currentFont = fontCollection[0];
+            } else { // It's a single font (TTF, OTF, WOFF)
+                fontCollection = [];
+                currentFont = fonts;
+            }
+            updateUIForNewFont();
+        } catch (err) {
+            console.error(err);
+            displayStatus(`エラー: 無効なフォントファイル、または対応していない形式です。<br>${err.message}`, 'error');
+        }
+    };
+    reader.onerror = () => {
+        displayStatus('エラー: ファイルの読み込みに失敗しました。', 'error');
+    };
+    displayStatus(`'${file.name}' を読み込み中...`, 'info');
+    reader.readAsArrayBuffer(file);
+}
+
+/**
+ * Resets the UI to its initial state
+ */
+function resetUI() {
+    statusContainer.innerHTML = '';
+    ttcSelector.style.display = 'none';
+    fontInfoContainer.style.display = 'none';
+    featureControlsContainer.style.display = 'none';
+    variableAxesContainer.style.display = 'none';
+    extraPreviews.style.display = 'none';
+    fontInfo.querySelector('ul').innerHTML = '';
+    featureControls.innerHTML = '';
+    variableAxesControls.innerHTML = '';
+    glyphMap.innerHTML = '';
+    waterfallDisplay.innerHTML = '';
+    previewText.innerHTML = `<div class="placeholder-text">ここにフォントファイルをドラッグ＆ドロップしてください</div>`;
+}
+
+/**
+ * Updates all UI elements after a new font is loaded/selected
+ */
+function updateUIForNewFont() {
+    if (!currentFont) return;
     
-    <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        // DOM要素の取得
-        const dropZone = document.getElementById('drop-zone');
-        const fileInput = document.getElementById('font-file-input');
-        const viewer = document.getElementById('viewer');
-        const resetBtn = document.getElementById('reset-btn');
-        const loader = document.getElementById('loader');
-        const dropText = document.getElementById('drop-text');
-        const errorMessage = document.getElementById('error-message');
-        
-        // フォント情報
-        const infoFilename = document.getElementById('info-filename');
-        const infoFamily = document.getElementById('info-family');
-        const infoStyle = document.getElementById('info-style');
-        const infoVersion = document.getElementById('info-version');
-        const infoGlyphs = document.getElementById('info-glyphs');
+    injectFontFace();
+    populateFontInfo();
+    populateFeatureControls();
+    populateVariableAxesControls();
+    populateGlyphMap();
+    populateWaterfall();
+    
+    fontInfoContainer.style.display = 'block';
+    extraPreviews.style.display = 'block';
+    
+    // Clear status message on success
+    statusContainer.innerHTML = '';
 
-        // TTCセレクタ
-        const ttcSelectorGroup = document.getElementById('ttc-selector-group');
-        const ttcSelector = document.getElementById('ttc-selector');
+    updatePreview();
+}
 
-        // プレビューコントロール
-        const fontSizeSlider = document.getElementById('font-size-slider');
-        const fontSizeValue = document.getElementById('font-size-value');
-        const previewTextInput = document.getElementById('preview-text-input');
-        const sampleTextSelector = document.getElementById('sample-text-selector');
 
-        // バリアブルフォント
-        const varFontControls = document.getElementById('variable-font-controls');
-        const varAxesContainer = document.getElementById('variable-axes');
-        
-        // グリフマップ
-        const glyphMapContainer = document.getElementById('glyph-map-container');
-        const glyphMap = document.getElementById('glyph-map');
-
-        // テーマ切替
-        const themeToggle = document.getElementById('theme-toggle');
-        const themeIcon = document.getElementById('theme-icon');
-
-        // グローバル変数
-        let loadedFonts = [];
-        let currentFont = null;
-        const FONT_FAMILY_NAME = 'custom-font-preview';
-
-        const sampleTexts = {
-            custom: '',
-            pangram_en: 'The quick brown fox jumps over the lazy dog. 1234567890',
-            pangram_jp: 'いろはにほへと ちりぬるを わかよたれそ つねならむ うゐのおくやま けふこえて あさきゆめみし ゑひもせすん。\n鳥啼く声す 夢覚ませ 見よ明け渡る 東を 空色栄えて 沖つ辺に 帆船群れゐぬ 靄の中。',
-            hiragana: 'あいうえお かきくけこ さしすせそ たちつてと なにぬねの はひふへほ まみむめも やゆよ らりるれろ わをん ぁぃぅぇぉ がぎぐげご ざじずぜぞ だぢづでど ばびぶべぼ ぱぴぷぺぽ',
-            katakana: 'アイウエオ カキクケコ サシスセソ タチツテト ナニヌネノ ハヒフヘホ マミムメモ ヤユヨ ラリルレロ ワヲン ァィゥェォ ガギグゲゴ ザジズゼゾ ダヂヅデド バビブベボ パピプペポ',
-            alphanumeric: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ\nabcdefghijklmnopqrstuvwxyz\n0123456789\n!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~',
-        };
-
-        // --- イベントリスナー設定 ---
-        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
-        dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); });
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            if (files.length > 0) handleFile(files[0]);
-        });
-        dropZone.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) handleFile(e.target.files[0]);
-        });
-        
-        resetBtn.addEventListener('click', resetView);
-        themeToggle.addEventListener('click', toggleTheme);
-
-        fontSizeSlider.addEventListener('input', (e) => {
-            const size = e.target.value;
-            fontSizeValue.textContent = size;
-            previewTextInput.style.fontSize = `${size}px`;
-        });
-        
-        previewTextInput.addEventListener('input', () => {
-            if (sampleTextSelector.value !== 'custom') sampleTextSelector.value = 'custom';
-        });
-
-        sampleTextSelector.addEventListener('change', (e) => {
-            const key = e.target.value;
-            togglePreviewMode(key === 'glyphs');
-            if (key !== 'glyphs') {
-                previewTextInput.value = sampleTexts[key] || previewTextInput.value;
-            }
-        });
-        
-        ttcSelector.addEventListener('change', (e) => {
-            const selectedIndex = parseInt(e.target.value, 10);
-            if (loadedFonts[selectedIndex]) {
-                currentFont = loadedFonts[selectedIndex];
-                updateUIWithFont(currentFont);
-            }
-        });
-        
-        glyphMap.addEventListener('click', (e) => {
-            if (e.target.tagName === 'SPAN') {
-                navigator.clipboard.writeText(e.target.textContent).catch(err => console.error('Failed to copy text: ', err));
-            }
-        });
-
-        // --- 関数 ---
-        function handleFile(file) {
-            showLoader(true);
-            errorMessage.style.display = 'none';
-
-            if (typeof opentype === 'undefined') {
-                showError('Error: opentype.js library not loaded.');
-                showLoader(false);
-                return;
-            }
-            
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const arrayBuffer = e.target.result;
-                    // opentype.parseはTTCの場合、Fontの配列を返す
-                    const fonts = opentype.parse(arrayBuffer);
-                    
-                    if (Array.isArray(fonts)) { // TTCファイル
-                        loadedFonts = fonts;
-                        currentFont = loadedFonts[0];
-                        setupTTCSelector(loadedFonts);
-                    } else { // 通常のフォントファイル
-                        loadedFonts = [fonts];
-                        currentFont = fonts;
-                        ttcSelectorGroup.style.display = 'none';
-                    }
-                    
-                    loadedFonts.forEach(f => f.fileName = file.name); // ファイル名を全フォントに
-                    currentFont.fileName = file.name;
-                    
-                    showViewer();
-                    updateUIWithFont(currentFont);
-
-                } catch (err) {
-                    console.error('Font parsing error:', err);
-                    showError('フォントファイルの解析に失敗しました。対応していない形式か、ファイルが破損している可能性があります。');
-                } finally {
-                    showLoader(false);
-                }
-            };
-            reader.onerror = () => {
-                showError('ファイルの読み込みに失敗しました。');
-                showLoader(false);
-            };
-            reader.readAsArrayBuffer(file);
+/**
+ * Injects the @font-face rule into the document's head
+ */
+function injectFontFace() {
+    const styleId = 'custom-font-style';
+    let styleElement = document.getElementById(styleId);
+    if (!styleElement) {
+        styleElement = document.createElement('style');
+        styleElement.id = styleId;
+        document.head.appendChild(styleElement);
+    }
+    
+    // Convert ArrayBuffer to Base64
+    const base64 = btoa(new Uint8Array(currentFontBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+    
+    const fontFormatMap = {
+        'OTTO': 'opentype',
+        'true': 'truetype',
+        'ttcf': 'truetype-collection',
+        'woff': 'woff',
+        'woff2': 'woff2',
+    };
+    const format = fontFormatMap[currentFont.outlinesFormat] || 'opentype';
+    
+    const fontFaceRule = `
+        @font-face {
+            font-family: '${FONT_FAMILY_NAME}';
+            src: url(data:font/${format};base64,${base64});
         }
+    `;
+    styleElement.textContent = fontFaceRule;
+}
 
-        function updateUIWithFont(font) {
-            const fontFaceStyle = document.getElementById('dynamic-font-face');
-            if (fontFaceStyle) fontFaceStyle.remove();
-            
-            const newStyle = document.createElement('style');
-            newStyle.id = 'dynamic-font-face';
-            newStyle.textContent = `
-                @font-face {
-                    font-family: '${FONT_FAMILY_NAME}';
-                    src: url('${font.toUrl()}');
-                }
-            `;
-            document.head.appendChild(newStyle);
+/**
+ * Populates the font metadata table
+ */
+function populateFontInfo() {
+    const ul = fontInfo.querySelector('ul');
+    ul.innerHTML = '';
+    const names = currentFont.names;
+    const info = {
+        'Family': names.fontFamily?.en || 'N/A',
+        'Style': names.fontSubfamily?.en || 'N/A',
+        'Version': names.version?.en || 'N/A',
+        'PostScript Name': names.postScriptName?.en || 'N/A',
+        'Glyphs': currentFont.numGlyphs
+    };
 
-            previewTextInput.style.fontFamily = `'${FONT_FAMILY_NAME}', sans-serif`;
-            
-            const names = font.names;
-            infoFilename.textContent = font.fileName || 'N/A';
-            infoFamily.textContent = names.fontFamily?.en || 'N/A';
-            infoStyle.textContent = names.fontSubfamily?.en || 'N/A';
-            infoVersion.textContent = (names.version?.en || 'N/A').replace('Version ','');
-            infoGlyphs.textContent = font.numGlyphs;
+    for (const [key, value] of Object.entries(info)) {
+        const li = document.createElement('li');
+        li.innerHTML = `<span class="key">${key}</span><span class="value" title="${value}">${value}</span>`;
+        ul.appendChild(li);
+    }
+}
 
-            setupVariableFontControls(font);
-            generateGlyphMap(font);
-            updateVariableFontSettings(); // スタイル適用
-        }
-        
-        function setupTTCSelector(fonts) {
-            ttcSelector.innerHTML = '';
-            fonts.forEach((font, index) => {
-                const option = document.createElement('option');
-                option.value = index;
-                const family = font.names.fontFamily?.en || `Font ${index + 1}`;
-                const style = font.names.fontSubfamily?.en || 'Unknown Style';
-                option.textContent = `${family} - ${style}`;
-                ttcSelector.appendChild(option);
-            });
-            ttcSelectorGroup.style.display = 'block';
-        }
+/**
+ * Populates checkboxes for OpenType features
+ */
+function populateFeatureControls() {
+    featureControls.innerHTML = '';
+    const features = currentFont.tables.gsub?.features?.map(f => f.tag) || [];
+    const uniqueFeatures = [...new Set(features)];
 
-        function setupVariableFontControls(font) {
-            const axes = font.tables.fvar?.axes;
-            if (axes && axes.length > 0) {
-                varAxesContainer.innerHTML = '';
-                axes.forEach(axis => {
-                    const axisWrapper = document.createElement('div');
-                    const label = document.createElement('label');
-                    label.textContent = `${axis.name.en} (${axis.tag})`;
-                    const valueSpan = document.createElement('span');
-                    valueSpan.style.float = 'right';
-                    valueSpan.textContent = parseFloat(axis.defaultValue).toFixed(2);
-
-                    const slider = document.createElement('input');
-                    slider.type = 'range';
-                    slider.min = axis.minValue;
-                    slider.max = axis.maxValue;
-                    slider.step = (axis.maxValue - axis.minValue) / 1000;
-                    slider.value = axis.defaultValue;
-                    slider.dataset.tag = axis.tag;
-
-                    slider.addEventListener('input', () => {
-                        valueSpan.textContent = parseFloat(slider.value).toFixed(2);
-                        updateVariableFontSettings();
-                    });
-                    
-                    label.appendChild(valueSpan);
-                    axisWrapper.appendChild(label);
-                    axisWrapper.appendChild(slider);
-                    varAxesContainer.appendChild(axisWrapper);
-                });
-                varFontControls.style.display = 'block';
-            } else {
-                varFontControls.style.display = 'none';
-                previewTextInput.style.fontVariationSettings = 'normal';
-                glyphMap.style.fontVariationSettings = 'normal';
-            }
-        }
-
-        function updateVariableFontSettings() {
-            const sliders = varAxesContainer.querySelectorAll('input[type="range"]');
-            const settings = Array.from(sliders).map(s => `'${s.dataset.tag}' ${s.value}`).join(', ');
-            previewTextInput.style.fontVariationSettings = settings;
-            glyphMap.style.fontVariationSettings = settings;
-        }
-        
-        function generateGlyphMap(font) {
-            glyphMap.innerHTML = '';
-            const fragment = document.createDocumentFragment();
-            for (let i = 0; i < font.numGlyphs; i++) {
-                const glyph = font.glyphs.get(i);
-                if (glyph.unicode) {
-                    const char = String.fromCodePoint(glyph.unicode);
-                    const span = document.createElement('span');
-                    span.textContent = char;
-                    span.title = `U+${glyph.unicode.toString(16).toUpperCase()}`;
-                    span.style.fontFamily = `'${FONT_FAMILY_NAME}', sans-serif`;
-                    fragment.appendChild(span);
-                }
-            }
-            glyphMap.appendChild(fragment);
-        }
-
-        function togglePreviewMode(showGlyphMap) {
-            previewTextInput.style.display = showGlyphMap ? 'none' : 'block';
-            glyphMapContainer.style.display = showGlyphMap ? 'block' : 'none';
-        }
-
-        function showViewer() {
-            dropZone.classList.add('hidden');
-            viewer.classList.remove('hidden');
-            resetBtn.style.display = 'inline-block';
-            sampleTextSelector.value = 'pangram_en';
-            previewTextInput.value = sampleTexts.pangram_en;
-            togglePreviewMode(false);
-        }
-
-        function resetView() {
-            viewer.classList.add('hidden');
-            dropZone.classList.remove('hidden');
-            resetBtn.style.display = 'none';
-            errorMessage.style.display = 'none';
-
-            fileInput.value = '';
-            loadedFonts = [];
-            currentFont = null;
-            const fontFaceStyle = document.getElementById('dynamic-font-face');
-            if (fontFaceStyle) fontFaceStyle.remove();
-            
-            previewTextInput.style.fontFamily = 'var(--font-family-ui)';
-            previewTextInput.style.fontVariationSettings = 'normal';
-            fontSizeSlider.value = 48;
-            fontSizeValue.textContent = 48;
-            previewTextInput.style.fontSize = '48px';
-        }
-
-        function showLoader(show) {
-            loader.style.display = show ? 'block' : 'none';
-            dropText.style.display = show ? 'none' : 'block';
-        }
-
-        function showError(message) {
-            errorMessage.textContent = message;
-            errorMessage.style.display = 'block';
-        }
-
-        function toggleTheme() {
-            document.body.classList.toggle('light-mode');
-            localStorage.setItem('theme', document.body.classList.contains('light-mode') ? 'light' : 'dark');
-            updateThemeIcon();
-        }
-        
-        function updateThemeIcon() {
-            if (document.body.classList.contains('light-mode')) {
-                themeIcon.textContent = '🌙';
-            } else {
-                themeIcon.textContent = '☀️';
-            }
-        }
-
-        // 初期化処理
-        function init() {
-            const savedTheme = localStorage.getItem('theme');
-            const prefersLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
-            if (savedTheme === 'light' || (!savedTheme && prefersLight)) {
-                document.body.classList.add('light-mode');
-            } else {
-                document.body.classList.remove('light-mode');
-            }
-            updateThemeIcon();
-            resetView(); // 初期状態をリセットで設定
-        }
-        
-        init();
+    if (uniqueFeatures.length === 0) {
+        featureControlsContainer.style.display = 'none';
+        return;
+    }
+    
+    uniqueFeatures.sort().forEach(tag => {
+        const div = document.createElement('div');
+        div.className = 'feature-toggle';
+        div.innerHTML = `
+            <label for="feature-${tag}">${tag}</label>
+            <label class="switch">
+              <input type="checkbox" id="feature-${tag}" data-tag="${tag}">
+              <span class="slider"></span>
+            </label>
+        `;
+        div.querySelector('input').addEventListener('change', updatePreview);
+        featureControls.appendChild(div);
     });
-    </script>
+    
+    featureControlsContainer.style.display = 'block';
+}
+
+/**
+ * Populates sliders for Variable Font axes
+ */
+function populateVariableAxesControls() {
+    variableAxesControls.innerHTML = '';
+    const axes = currentFont.tables.fvar?.axes;
+    if (!axes || axes.length === 0) {
+        variableAxesContainer.style.display = 'none';
+        return;
+    }
+
+    axes.forEach(axis => {
+        const div = document.createElement('div');
+        div.className = 'slider-container';
+        div.innerHTML = `
+            <label for="axis-${axis.tag}" title="${axis.name.en}">${axis.tag}</label>
+            <input type="range" id="axis-${axis.tag}" data-tag="${axis.tag}" min="${axis.minValue}" max="${axis.maxValue}" value="${axis.defaultValue}" step="any">
+            <output for="axis-${axis.tag}">${axis.defaultValue}</output>
+        `;
+        const slider = div.querySelector('input');
+        const output = div.querySelector('output');
+        slider.addEventListener('input', () => {
+            output.value = parseFloat(slider.value).toFixed(2);
+            updatePreview();
+        });
+        variableAxesControls.appendChild(div);
+    });
+    variableAxesContainer.style.display = 'block';
+}
+
+/**
+ * Renders the preview text with current settings
+ */
+function updatePreview() {
+    if (!currentFont) return;
+    
+    // Update main preview
+    previewText.innerText = textInput.value;
+    previewText.style.fontSize = `${fontSizeSlider.value}px`;
+    previewText.style.lineHeight = lineHeightSlider.value;
+
+    // --- Advanced Features ---
+    // 1. OpenType Features
+    const activeFeatures = Array.from(featureControls.querySelectorAll('input:checked'))
+                                .map(input => `'${input.dataset.tag}'`)
+                                .join(', ');
+    previewText.style.fontFeatureSettings = activeFeatures;
+    
+    // 2. Variable Font Settings
+    const variationSettings = Array.from(variableAxesControls.querySelectorAll('input'))
+                                   .map(input => `'${input.dataset.tag}' ${input.value}`)
+                                   .join(', ');
+    previewText.style.fontVariationSettings = variationSettings;
+
+    // Update waterfall and glyph map with new feature settings
+    document.querySelectorAll('.text-preview, .glyph-item').forEach(el => {
+        el.style.fontFeatureSettings = activeFeatures;
+        el.style.fontVariationSettings = variationSettings;
+    });
+    
+    // Update waterfall text if needed
+    document.querySelectorAll('.text-preview').forEach(el => el.innerText = textInput.value);
+}
+
+/**
+ * Populates the waterfall display
+ */
+function populateWaterfall() {
+    waterfallDisplay.innerHTML = '';
+    const sizes = [12, 14, 16, 18, 24, 36, 48, 60, 72];
+    sizes.forEach(size => {
+        const item = document.createElement('div');
+        item.className = 'waterfall-item';
+        item.innerHTML = `
+            <span class="size-label">${size}px</span>
+            <span class="text-preview" style="font-size: ${size}px;">${textInput.value}</span>
+        `;
+        waterfallDisplay.appendChild(item);
+    });
+}
+
+/**
+ * Populates the glyph map display
+ */
+function populateGlyphMap() {
+    glyphMap.innerHTML = '';
+    // To avoid performance issues with huge fonts, limit the display.
+    const maxGlyphs = 500;
+    const glyphs = Object.values(currentFont.glyphs.glyphs).slice(0, maxGlyphs);
+
+    glyphs.forEach(glyph => {
+        if (glyph.unicode) {
+            const char = String.fromCodePoint(glyph.unicode);
+            const item = document.createElement('div');
+            item.className = 'glyph-item';
+            item.textContent = char;
+            item.title = `U+${glyph.unicode.toString(16).toUpperCase()}`;
+
+            // Add a more detailed tooltip
+            const tooltip = document.createElement('span');
+            tooltip.className = 'tooltip';
+            tooltip.innerText = `Unicode: U+${glyph.unicode.toString(16).toUpperCase()}\nName: ${glyph.name || 'N/A'}`;
+            item.appendChild(tooltip);
+
+            // Add character to textarea on click
+            item.addEventListener('click', () => {
+                textInput.value += char;
+                textInput.focus();
+                updatePreview();
+            });
+
+            glyphMap.appendChild(item);
+        }
+    });
+}
+
+/**
+ * For TTC files, populates the font selection dropdown
+ * @param {Array} fonts - Array of opentype.Font objects
+ */
+function populateTtcSelector(fonts) {
+    fontChoice.innerHTML = '';
+    fonts.forEach((font, index) => {
+        const option = document.createElement('option');
+        option.value = index;
+        const family = font.names.fontFamily?.en || 'Unknown Family';
+        const style = font.names.fontSubfamily?.en || 'Regular';
+        option.textContent = `${family} - ${style}`;
+        fontChoice.appendChild(option);
+    });
+}
+
+/**
+ * Displays a status or error message
+ * @param {string} message - The message to display
+ * @param {'info'|'error'} type - The type of message
+ */
+function displayStatus(message, type = 'info') {
+    statusContainer.innerHTML = `<div class="status-message ${type}">${message}</div>`;
+}
+
+</script>
 </body>
 </html>
