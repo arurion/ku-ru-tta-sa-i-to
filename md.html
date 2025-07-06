@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>カスタムフォントビューア</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    #preview {
+      border: 1px solid #ccc;
+      padding: 20px;
+      margin-top: 10px;
+      font-size: 24px;
+      min-height: 100px;
+    }
+  </style>
+</head>
+<body>
+  <h1>カスタムフォントビューア</h1>
+
+  <!-- フォントファイル入力 -->
+  <label for="fontFile">フォントファイル（.ttf/.otf）:</label>
+  <input id="fontFile" type="file" accept=".ttf,.otf"><br><br>
+
+  <!-- テキスト入力 -->
+  <label for="textInput">プレビュー文字列:</label>
+  <input id="textInput" type="text" value="こんにちは、世界！" style="width: 100%;"><br>
+
+  <!-- プレビュー領域 -->
+  <div id="preview">こんにちは、世界！</div>
+
+  <script>
+   document.addEventListener('DOMContentLoaded', () => {
+    // DOM要素の取得
+    const markdownInput = document.getElementById('markdown-input');
+    const htmlOutput = document.getElementById('html-output');
+    const fontFileInput = document.getElementById('font-file-input');
+    const fontFileNameSpan = document.getElementById('font-file-name');
+
+    // -- Markdownのリアルタイムプレビュー機能 --
+
+    // MarkdownをHTMLに変換して表示する関数
+    const renderMarkdown = () => {
+        const markdownText = markdownInput.value;
+        htmlOutput.innerHTML = marked.parse(markdownText);
+    };
+
+    // テキストエリアに入力があるたびにプレビューを更新
+    markdownInput.addEventListener('input', renderMarkdown);
+
+
+    // -- フォント読み込み機能（@font-face注入方式） --
+
+    const loadAndApplyFont = (event) => {
+        const file = event.target.files[0];
+        if (!file) {
+            return;
+        }
+
+        // 読み込むフォントのファミリー名と、注入するstyleタグのIDを定義
+        const FONT_FAMILY_NAME = 'UserLocalFont';
+        const DYNAMIC_STYLE_ID = 'dynamic-font-style';
+
+        try {
+            // 1. ファイルから一時的なURLを生成
+            const fontUrl = URL.createObjectURL(file);
+
+            // 2. ファイルの拡張子からフォントのフォーマットを決定
+            // 堅牢にするために小文字に変換してチェック
+            const getFontFormat = (fileName) => {
+                const lowerName = fileName.toLowerCase();
+                if (lowerName.endsWith('.otf')) return 'opentype';
+                if (lowerName.endsWith('.ttf')) return 'truetype';
+                if (lowerName.endsWith('.woff')) return 'woff';
+                if (lowerName.endsWith('.woff2')) return 'woff2';
+                return 'truetype'; // 不明な場合はtruetypeを試す
+            };
+            const fontFormat = getFontFormat(file.name);
+
+            // 3. 以前に注入した<style>タグがあれば削除する
+            // これにより、複数回フォントを選択してもルールが重複しない
+            const oldStyle = document.getElementById(DYNAMIC_STYLE_ID);
+            if (oldStyle) {
+                oldStyle.remove();
+            }
+
+            // 4. 新しい<style>タグを生成
+            const newStyle = document.createElement('style');
+            newStyle.id = DYNAMIC_STYLE_ID;
+
+            // 5. @font-faceルールを文字列として作成し、styleタグに設定
+            newStyle.textContent = `
+                @font-face {
+                    font-family: '${FONT_FAMILY_NAME}';
+                    src: url('${fontUrl}') format('${fontFormat}');
+                }
+            `;
+
+            // 6. 生成した<style>タグを<head>に追加
+            document.head.appendChild(newStyle);
+
+            // 7. プレビューエリアにフォントを適用（念のため、フォールバックフォントも指定）
+            htmlOutput.style.fontFamily = `'${FONT_FAMILY_NAME}', sans-serif`;
+
+            // 8. ファイル名を表示してUIを更新
+            fontFileNameSpan.textContent = `適用中: ${file.name}`;
+            fontFileNameSpan.style.color = '#27ae60';
+
+        } catch (error) {
+            console.error('フォントの読み込みに失敗しました:', error);
+            alert(`フォントファイル「${file.name}」の読み込みに失敗しました。`);
+            fontFileNameSpan.textContent = `エラー: ${file.name} は読み込めません`;
+            fontFileNameSpan.style.color = '#e74c3c';
+        }
+    };
+
+    // ファイル選択インプットに変更があったら関数を実行
+    fontFileInput.addEventListener('change', loadAndApplyFont);
+
+
+    // -- 初期化 --
+    // ページ読み込み時に一度プレビューを生成
+    renderMarkdown();
+});
+  </script>
+</body>
+</html>
