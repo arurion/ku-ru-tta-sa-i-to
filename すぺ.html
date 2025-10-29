@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スペクトログラムツール</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        canvas { border: 1px solid #000; position: relative; }
+        .controls { margin-bottom: 20px; }
+        #log { white-space: pre-wrap; border: 1px solid #ccc; padding: 10px; height: 200px; overflow-y: auto; }
+        #dropZone { border: 2px dashed #ccc; padding: 20px; text-align: center; margin-bottom: 10px; }
+        #tooltip { position: absolute; background: rgba(0,0,0,0.7); color: white; padding: 5px; display: none; pointer-events: none; }
+        .accordion { margin-top: 10px; }
+        .accordion-header { cursor: pointer; background: #eee; padding: 10px; }
+        .accordion-content { display: none; padding: 10px; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+    <h1>スペクトログラム表示ツール</h1>
+    
+    <div class="controls">
+        <h2>リアルタイム分析 (録音/キャプチャ)</h2>
+        <button id="startCapture">キャプチャ開始</button>
+        <button id="stopCapture">停止</button>
+        <button id="startRecord">録音開始</button>
+        <button id="stopRecord">録音停止</button>
+        <a id="downloadRecord" style="display:none;">録音ダウンロード</a>
+        
+        <h2>メディアファイルの再生と表示</h2>
+        <div id="dropZone">ファイルをここにドラッグ＆ドロップ</div>
+        <input type="file" id="mediaFile" accept="audio/*,video/*">
+        <button id="playFile">再生</button>
+        <button id="pauseFile">一時停止</button>
+        
+        <div class="accordion">
+            <div class="accordion-header">スペクトログラム設定</div>
+            <div class="accordion-content">
+                <label>周波数マーク (Hz, カンマ区切り): <input type="text" id="freqMarks" value=""></label><br>
+                <label>周波数下限 (Hz): <input type="number" id="freqMin" value="0" min="0"></label><br>
+                <label>周波数上限 (Hz): <input type="number" id="freqMax" value="22050" min="0"></label><br>
+                <label>FFTサイズ: 
+                    <select id="fftSize">
+                        <option value="256">256</option>
+                        <option value="512">512</option>
+                        <option value="1024">1024</option>
+                        <option value="2048" selected>2048</option>
+                        <option value="4096">4096</option>
+                        <option value="8192">8192</option>
+                        <option value="16384">16384</option>
+                    </select>
+                </label><br>
+                <label>ゲイン: <input type="range" id="gain" min="0" max="10" value="1" step="0.1"></label><br>
+                <label>レンジ: <input type="range" id="range" min="1" max="100" value="50" step="1"></label><br>
+                <label>時間スケール: <input type="range" id="timeScale" min="0.1" max="10" value="1" step="0.1"></label><br>
+                <button id="applySettings">適用</button>
+            </div>
+        </div>
+        
+        <div class="accordion">
+            <div class="accordion-header">周波数カーソル設定</div>
+            <div class="accordion-content">
+                <label>音名を表示: <input type="checkbox" id="showNoteNames"></label><br>
+            </div>
+        </div>
+        
+        <div class="accordion">
+            <div class="accordion-header">録音設定</div>
+            <div class="accordion-content">
+                <!-- 録音オプションをここに追加可能、例: ビットレートなど -->
+                <label>録音フォーマット: <select id="recordFormat"><option value="audio/webm">WebM</option><option value="audio/wav">WAV (experimental)</option></select></label>
+            </div>
+        </div>
+        
+        <h2>ログ</h2>
+        <div id="log"></div>
+        <button id="downloadLog">ログダウンロード</button>
+    </div>
+    
+    <canvas id="spectrogram" width="800" height="400"></canvas>
+    <div id="tooltip"></div>
+    
+    <script>
+        const canvas = document.getElementById('spectrogram');
+        const ctx = canvas.getContext('2d');
+        const logDiv = document.getElementById('log');
+        const tooltip = document.getElementById('tooltip');
+        let audioCtx;
+        let analyser;
+        let source;
+        let dataArray;
+        let bufferLength;
+        let isRunning = false;
+        let animationId;
+        let freqMin = 0;
+        let freqMax = 22050;
+        let fftSize = 2048;
+        let gain = 1;
+        let range = 50;
+        let timeScale = 1;
+        let freqMarks = [];
+        let showNoteNames = false;
+        let xPos = 0;
+        let logs = [];
+        let mediaElement;
+        let mediaRecorder;
+        let recordedChunks = [];
+        let stream;
+        
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (analyser) analyser.disconnect();
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = fftSize;
+            bufferLength = analyser.frequencyBinCount;
+            dataArray = new Uint8Array(bufferLength);
+        }
+        
+        function drawSpectrogram() {
+            analyser.getByteFrequencyData(dataArray);
+            
+            const sliceWidth = 1 / timeScale;
+            const binWidth = (audioCtx.sampleRate / 2) / bufferLength;
+            const startBin = Math.floor(freqMin / binWidth);
+            const endBin = Math.min(Math.ceil(freqMax / binWidth), bufferLength);
+            const numBins = endBin - startBin;
+            const heightScale = canvas.height / numBins;
+            
+            ctx.fillStyle = 'rgb(255, 255, 255)';
+            ctx.fillRect(xPos, 0, 1, canvas.height);
+            
+            for (let i = startBin; i < endBin; i++) {
+                let value = (dataArray[i] / 255) * gain;
+                value = Math.min(1, Math.max(0, (value * 255 - (255 - range)) / range));
+                const y = canvas.height - ((i - startBin + 1) * heightScale);
+                ctx.fillStyle = `rgb(${value * 255}, 0, ${255 - value * 255})`;
+                ctx.fillRect(xPos, y, 1, heightScale);
+            }
+            
+            freqMarks.forEach(mark => {
+                const bin = Math.floor(mark / binWidth);
+                if (bin >= startBin && bin < endBin) {
+                    const y = canvas.height - ((bin - startBin) * heightScale);
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(canvas.width, y);
+                    ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+                    ctx.stroke();
+                }
+            });
+            
+            xPos = (xPos + 1) % canvas.width;
+            if (xPos === 0) {
+                ctx.fillStyle = 'rgb(255, 255, 255)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+            
+            logEvent(`スペクトログラム更新: xPos=${xPos}`);
+            
+            if (isRunning) {
+                animationId = requestAnimationFrame(drawSpectrogram);
+            }
+        }
+        
+        function startAnalysis(src) {
+            initAudio();
+            src.connect(analyser);
+            analyser.connect(audioCtx.destination);
+            isRunning = true;
+            drawSpectrogram();
+        }
+        
+        function stopAnalysis() {
+            isRunning = false;
+            cancelAnimationFrame(animationId);
+            if (source && source.disconnect) source.disconnect();
+            if (mediaElement) mediaElement.pause();
+            logEvent('分析停止');
+        }
+        
+        document.getElementById('startCapture').addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                source = audioCtx.createMediaStreamSource(stream);
+                startAnalysis(source);
+                logEvent('キャプチャ開始 (マイクまたはシステム音声)');
+            } catch (err) {
+                logEvent('アクセスエラー: ' + err);
+            }
+        });
+        
+        document.getElementById('stopCapture').addEventListener('click', stopAnalysis);
+        
+        function loadMedia(file) {
+            if (mediaElement) mediaElement.pause();
+            mediaElement = file.type.startsWith('video/') ? document.createElement('video') : new Audio();
+            mediaElement.src = URL.createObjectURL(file);
+            mediaElement.controls = true;
+            document.body.appendChild(mediaElement);
+            mediaElement.style.display = 'none';
+        }
+        
+        document.getElementById('playFile').addEventListener('click', () => {
+            const file = document.getElementById('mediaFile').files[0];
+            if (file) {
+                loadMedia(file);
+                mediaElement.play();
+                source = audioCtx.createMediaElementSource(mediaElement);
+                startAnalysis(source);
+                logEvent('メディア再生開始: ' + file.name);
+            }
+        });
+        
+        document.getElementById('pauseFile').addEventListener('click', () => {
+            if (mediaElement) mediaElement.pause();
+            stopAnalysis();
+            logEvent('メディア一時停止');
+        });
+        
+        // ドラッグ＆ドロップ
+        const dropZone = document.getElementById('dropZone');
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#000';
+        });
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.style.borderColor = '#ccc';
+        });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#ccc';
+            const file = e.dataTransfer.files[0];
+            if (file && (file.type.startsWith('audio/') || file.type.startsWith('video/'))) {
+                document.getElementById('mediaFile').files = e.dataTransfer.files;
+                logEvent('ファイルドロップ: ' + file.name);
+            }
+        });
+        
+        document.getElementById('applySettings').addEventListener('click', () => {
+            freqMin = parseInt(document.getElementById('freqMin').value);
+            freqMax = parseInt(document.getElementById('freqMax').value);
+            fftSize = parseInt(document.getElementById('fftSize').value);
+            gain = parseFloat(document.getElementById('gain').value);
+            range = parseInt(document.getElementById('range').value);
+            timeScale = parseFloat(document.getElementById('timeScale').value);
+            freqMarks = document.getElementById('freqMarks').value.split(',').map(f => parseFloat(f.trim())).filter(f => !isNaN(f));
+            initAudio();
+            ctx.fillStyle = 'rgb(255, 255, 255)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            xPos = 0;
+            logEvent(`設定適用: freqMin=${freqMin}, freqMax=${freqMax}, fftSize=${fftSize}, gain=${gain}, range=${range}, timeScale=${timeScale}, freqMarks=${freqMarks.join(',')}`);
+        });
+        
+        document.getElementById('showNoteNames').addEventListener('change', () => {
+            showNoteNames = document.getElementById('showNoteNames').checked;
+            logEvent(`音名表示: ${showNoteNames}`);
+        });
+        
+        // 周波数カーソル
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const y = e.clientY - rect.top;
+            const binWidth = (audioCtx ? audioCtx.sampleRate / 2 : 22050) / bufferLength;
+            const freq = freqMin + (canvas.height - y) * (freqMax - freqMin) / canvas.height;
+            let display = `周波数: ${freq.toFixed(2)} Hz`;
+            if (showNoteNames) {
+                const note = freqToNote(freq);
+                display += ` (${note})`;
+            }
+            tooltip.style.display = 'block';
+            tooltip.style.left = `${e.clientX + 10}px`;
+            tooltip.style.top = `${e.clientY}px`;
+            tooltip.textContent = display;
+        });
+        
+        canvas.addEventListener('mouseout', () => {
+            tooltip.style.display = 'none';
+        });
+        
+        function freqToNote(freq) {
+            if (freq <= 0) return '';
+            const a4 = 440;
+            const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+            const semitones = Math.round(12 * Math.log2(freq / a4));
+            const noteIndex = (semitones + 57) % 12;
+            const octave = Math.floor((semitones + 57) / 12) - 1;
+            return `${notes[noteIndex]}${octave}`;
+        }
+        
+        // 録音機能
+        document.getElementById('startRecord').addEventListener('click', async () => {
+            if (!stream) {
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            }
+            mediaRecorder = new MediaRecorder(stream);
+            mediaRecorder.start();
+            recordedChunks = [];
+            mediaRecorder.ondataavailable = (e) => recordedChunks.push(e.data);
+            mediaRecorder.onstop = () => {
+                const format = document.getElementById('recordFormat').value;
+                const blob = new Blob(recordedChunks, { type: format });
+                const url = URL.createObjectURL(blob);
+                const downloadLink = document.getElementById('downloadRecord');
+                downloadLink.href = url;
+                downloadLink.download = `recording.${format.split('/')[1]}`;
+                downloadLink.style.display = 'inline';
+                downloadLink.textContent = '録音ダウンロード';
+                logEvent('録音停止・ダウンロード準備');
+            };
+            logEvent('録音開始');
+        });
+        
+        document.getElementById('stopRecord').addEventListener('click', () => {
+            if (mediaRecorder) {
+                mediaRecorder.stop();
+            }
+        });
+        
+        function logEvent(message) {
+            const timestamp = new Date().toLocaleString();
+            const logEntry = `[${timestamp}] ${message}\n`;
+            logs.push(logEntry);
+            logDiv.textContent += logEntry;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        document.getElementById('downloadLog').addEventListener('click', () => {
+            const blob = new Blob([logs.join('')], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'spectrogram_log.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+            logEvent('ログダウンロード');
+        });
+        
+        // アコーディオン機能
+        const accordions = document.querySelectorAll('.accordion-header');
+        accordions.forEach(header => {
+            header.addEventListener('click', () => {
+                const content = header.nextElementSibling;
+                content.style.display = content.style.display === 'block' ? 'none' : 'block';
+            });
+        });
+    </script>
+</body>
+</html>
